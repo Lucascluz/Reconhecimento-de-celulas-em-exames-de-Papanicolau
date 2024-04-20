@@ -1,14 +1,15 @@
+import cv2
+import io
+import mahotas
+
+import numpy as np
+import tkinter as tk
+
 from tkinter import filedialog
 from tkinter import ttk
-
+from matplotlib import pyplot as plt
 from PIL import Image, ImageTk, ImageDraw
-
-import cv2
-
-import tkinter as tk
-import numpy as np
-
-
+from skimage.feature import graycomatrix, graycoprops
 
 class ImageViewerApp:
     def __init__(self, master):
@@ -71,165 +72,157 @@ class ImageViewerApp:
         
         self.classify_button = tk.Button(self.button_frame, text="Classify", width=20, height=2, state = "disabled")
         self.classify_button.pack(side=tk.LEFT)
+        
+        self.open_image()
+        
+    def place_image(self, photo):
+        # Limpa o canvas antes de adicionar a nova imagem
+        self.canvas.delete("all")
+
+        # Calcula as coordenadas para centralizar a imagem
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        image_width = photo.width()
+        image_height = photo.height()
+        x_offset = (canvas_width - image_width) // 2
+        y_offset = (canvas_height - image_height) // 2
+
+        # Adiciona a imagem ao canvas centralizada
+        self.canvas.create_image(x_offset, y_offset, anchor="nw", image = photo)
+        self.canvas.image = photo
+        
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
             
     def open_image(self):
-        file_path = filedialog.askopenfilename()
+        
+        # file_path = filedialog.askopenfilename()
+        file_path = "380936485_726263259498711_6168372829584127727_n.jpg"
+        
         if file_path:
             image = cv2.imread(file_path)
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             image_pil_base = Image.fromarray(image_rgb)
             photo = ImageTk.PhotoImage(image_pil_base)
 
-            # Limpa o canvas antes de adicionar a nova imagem
-            self.canvas.delete("all")
-
-            # Calcula as coordenadas para centralizar a imagem
-            canvas_width = self.canvas.winfo_width()
-            canvas_height = self.canvas.winfo_height()
-            image_width = photo.width()
-            image_height = photo.height()
-            x_offset = (canvas_width - image_width) // 2
-            y_offset = (canvas_height - image_height) // 2
-
-            # Adiciona a imagem ao canvas centralizada
-            self.canvas.create_image(x_offset, y_offset, anchor="nw", image=photo)
-            self.canvas.image = photo
-
+            self.place_image(photo)
+            
             self.open_button.config(text="Change Image")
             self.gray_scale_button.config(state="active", command= lambda:self.convert_to_grayscale(image_pil_base))
-            self.colored_button.config(state="disabled")
-            self.histograms_button.config(state="disabled")
-            self.hsv_space_button.config(state="active", command= lambda: self.convert_to_hsv_space(image_pil_base))
-            self.haralick_button.config(state="disabled")
+            self.colored_button.config(state="active", command= lambda: self.revert_color(image_pil_base))
+            self.histograms_button.config(state="active", command = lambda: self.convert_to_histogram_gray(image_pil_base))
+            self.hsv_space_button.config(state="active", command= lambda: self.convert_to_histogram_hsv(image_pil_base))
+            self.haralick_button.config(state="active", command = lambda: self.get_haralick_descriptors(image_pil_base))
             self.hu_invariants_button.config(state="active")
             self.classify_button.config(state="active")
-
-            self.canvas.config(scrollregion=self.canvas.bbox("all"))
+            
+    def zoom_plus(self, image_pil_base):
+        print("ainda não implementado")
+        
+    def zoom_minus(self, image_pil_base):
+        print("ainda não implementado")
             
     def convert_to_grayscale(self, image_pil_color):
         # Converta a imagem PIL para uma imagem RGB e depois para uma matriz numpy
         image_pil_rgb = image_pil_color.convert('RGB')
-        image_np = np.array(image_pil_rgb)
+        matrix_rgb = np.array(image_pil_rgb)
 
         # Use o OpenCV para converter a imagem para tons de cinza
-        image_gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+        matrix_gray = cv2.cvtColor(matrix_rgb, cv2.COLOR_RGB2GRAY)
 
         # Converta a imagem em tons de cinza de volta para o formato PIL
-        image_pil_gray = Image.fromarray(image_gray)
+        image_pil_gray = Image.fromarray(matrix_gray)
         
+        # Converta a imagem do formato PIL para o formato ImageTK
         photo_gray = ImageTk.PhotoImage(image_pil_gray)
         
-        # Limpa o canvas antes de adicionar a nova imagem
-        self.canvas.delete("all")
-
-        # Calcula as coordenadas para centralizar a imagem
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        image_width = photo_gray.width()
-        image_height = photo_gray.height()
-        x_offset = (canvas_width - image_width) // 2
-        y_offset = (canvas_height - image_height) // 2
-
-        # Adiciona a imagem ao canvas centralizada
-        self.canvas.create_image(x_offset, y_offset, anchor="nw", image=photo_gray)
-        self.canvas.image = photo_gray
-
-        self.canvas.config(scrollregion=self.canvas.bbox("all"))
-        
-        self.gray_scale_button.config(state="disabled")
-        self.colored_button.config(state="active", command= lambda: self.revert_color(image_pil_color))
-        self.histograms_button.config(state="active", command= lambda: self.convert_to_histograms(image_pil_color))
-        self.hsv_space_button.config(state="disabled")
-        self.haralick_button.config(state="active")
-        self.hu_invariants_button.config(state="disabled")
-        self.classify_button.config(state="active")
+        # Coloque a imagem na tela
+        self.place_image(photo_gray)
         
     def revert_color(self, image_pil_color):
         photo_color = ImageTk.PhotoImage(image_pil_color)
         
-        # Limpa o canvas antes de adicionar a nova imagem
-        self.canvas.delete("all")
-
-        # Calcula as coordenadas para centralizar a imagem
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        image_width = photo_color.width()
-        image_height = photo_color.height()
-        x_offset = (canvas_width - image_width) // 2
-        y_offset = (canvas_height - image_height) // 2
-
-        # Adiciona a imagem ao canvas centralizada
-        self.canvas.create_image(x_offset, y_offset, anchor="nw", image=photo_color)
-        self.canvas.image = photo_color
-
-        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+        self.place_image(photo_color)
         
-        self.gray_scale_button.config(state="active", command= lambda:self.convert_to_grayscale(image_pil_color))
-        self.colored_button.config(state="di")
-        self.histograms_button.config(state="disabled")
-        self.hsv_space_button.config(state="active", command= lambda: self.convert_to_hsv_space(image_pil_color))
-        self.haralick_button.config(state="disabled")
-        self.hu_invariants_button.config(state="active")
-        self.classify_button.config(state="active")
+    def convert_to_histogram_gray(self, image_pil_color):
+        # Converte a imagem para tons de cinza
+        gray_img = image_pil_color.convert('L')
+
+        # Converte a imagem em tons de cinza para um array NumPy
+        gray_array = np.array(gray_img)
+
+        # Plota o histograma
+        plt.figure(figsize=(15.5, 7.5))
+        plt.hist(gray_array.ravel(), bins=256, color='gray')
+        plt.title('Histograma de tons de cinza')
+
+        # Cria um objeto BytesIO para salvar o gráfico
+        buf = io.BytesIO()
+
+        # Salva o gráfico no objeto BytesIO
+        plt.savefig(buf, format='png')
+
+        # Move o cursor do objeto BytesIO para o início
+        buf.seek(0)
+
+        # Carrega o objeto BytesIO como uma imagem PIL
+        img = Image.open(buf)
+
+        tk_img = ImageTk.PhotoImage(img)
         
-    def convert_to_histograms(self, image_pil_color):
-        # Converta a imagem PIL para uma imagem RGB e depois para uma matriz numpy
-        image_pil_rgb = image_pil_color.convert('RGB')
-        image_np = np.array(image_pil_rgb)
-
-        # Use o OpenCV para converter a imagem para tons de cinza
-        image_gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
-
-        # Converta a imagem em tons de cinza de volta para o formato PIL
-        image_pil_gray = Image.fromarray(image_gray)
+        self.place_image(tk_img)
         
-        histogram = image_pil_gray.histogram()
 
-        # Crie uma nova imagem PIL para o histograma
-        hist_height = 256
-        hist_image = Image.new('L', (512, hist_height), "white")
-        draw = ImageDraw.Draw(hist_image)
+    def convert_to_histogram_hsv(self, image_pil_color):
+        # Converte a imagem para o espaço de cores HSV
+        hsv_img = image_pil_color.convert('HSV')
 
-        # Desenhe as barras do histograma na nova imagem
-        highest_freq = max(histogram)
-        for i, freq in enumerate(histogram):
-            # Normalize a frequência para que caiba na altura da imagem
-            bar_height = int((freq / highest_freq) * hist_height)
-            draw.line([(i*2, hist_height - 10), (i*2, hist_height - 10 - bar_height)], fill="black")
+        # Converte a imagem HSV para um array NumPy
+        hsv_array = np.array(hsv_img)
 
-                # Adicione rótulos ao eixo x
-        labels = [0, 32, 64, 96, 128, 160, 192, 224, 255]
-        for i, label in enumerate(labels):
-            draw.text((label, hist_height - 10), str(label), fill="red")
+        # Plota o histograma para cada canal H, S e V
+        plt.figure(figsize=(15.5, 7.5))
+
+        for i, (channel, color) in enumerate(zip('HSV', 'bgr')):
+            histogram, bins = np.histogram(hsv_array[:, :, i], bins=256, range=(0, 256))
+            plt.plot(bins[:-1], histogram, color=color)
+
+        plt.title('Histograma do espaço de cores HSV')
+
+        # Cria um objeto BytesIO para salvar o gráfico
+        buf = io.BytesIO()
+
+        # Salva o gráfico no objeto BytesIO
+        plt.savefig(buf, format='png')
+
+        # Move o cursor do objeto BytesIO para o início
+        buf.seek(0)
+
+        # Carrega o objeto BytesIO como uma imagem PIL
+        img = Image.open(buf)
+
+        tk_img = ImageTk.PhotoImage(img)
         
-        photo_histogram = ImageTk.PhotoImage(hist_image)
+        self.place_image(tk_img)
         
-        # Limpa o canvas antes de adicionar a nova imagem
-        self.canvas.delete("all")
+    def get_haralick_descriptors(self, image_pil_color):
+        # Convertendo a imagem em cores para tons de cinza
+        gray_image = image_pil_color.convert('L')
+                
+        # Cria uma cópia da imagem
+        gray_image_copy = np.copy(gray_image)
 
-        # Calcula as coordenadas para centralizar a imagem
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        image_width = photo_histogram.width()
-        image_height = photo_histogram.height()
-        x_offset = (canvas_width - image_width) // 2
-        y_offset = (canvas_height - image_height) // 2
+        # Usa a cópia da imagem na função graycomatrix
+        glcm = graycomatrix(gray_image_copy, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
 
-        # Adiciona a imagem ao canvas centralizada
-        self.canvas.create_image(x_offset, y_offset, anchor="nw", image=photo_histogram)
-        self.canvas.image = photo_histogram
+        # Calcule a homogeneidade a partir da GLCM
+        homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
         
-        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+        contrast = graycoprops(glcm, "contrast")[0,0]
+        
+        print("Homogeniade: " + str(homogeneity))
+        
+        print("Contraste : " + str(contrast))
 
-        self.gray_scale_button.config(text="Gray Scale", state="active", command=lambda: self.convert_to_grayscale(image_pil_color))
-        self.histograms_button.config(state="disabled")
-        self.hsv_space_button.config(state="disabled")
-        self.haralick_button.config(state="disabled")
-        self.hu_invariants_button.config(state="disabled")
-        self.classify_button.config(state="disabled")
-
-    def convert_to_hsv_space(self, image_pill_color):
-        print("não fiz ainda")
         
 def main():
     # Cria a janela principal da aplicação
