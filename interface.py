@@ -1,3 +1,4 @@
+import os
 import cv2
 import io
 import mahotas
@@ -9,7 +10,11 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
 from matplotlib import pyplot as plt
+from matplotlib import gridspec as gridspec
 from PIL import Image, ImageTk
+from skimage import color
+from skimage.util import img_as_ubyte
+from skimage.feature import graycomatrix, graycoprops
 
 global zoom_factor
 
@@ -199,7 +204,7 @@ class ImageViewerApp:
 
         # Plota o histograma
         plt.figure(figsize=(15.5, 7.5))
-        plt.hist(gray_array.ravel(), bins=256, color='gray')
+        plt.hist(gray_array.ravel(), bins=16, color='gray')
         plt.title('Histograma de tons de cinza')
 
         # Cria um objeto BytesIO para salvar o gráfico
@@ -218,6 +223,9 @@ class ImageViewerApp:
         
         self.place_graph(tk_img)
         
+        self.zoom_plus_button.config(state="disabled")
+        self.zoom_minus_button.config(state="disabled")
+        
 
     def convert_to_histogram_hsv(self, image_pil_color):
         # Converte a imagem para o espaço de cores HSV
@@ -230,7 +238,7 @@ class ImageViewerApp:
         plt.figure(figsize=(15.5, 7.5))
 
         for i, (channel, color) in enumerate(zip('HSV', 'bgr')):
-            histogram, bins = np.histogram(hsv_array[:, :, i], bins=256, range=(0, 256))
+            histogram, bins = np.histogram(hsv_array[:, :, i], bins=16, range=(0, 256))
             plt.plot(bins[:-1], histogram, color=color)
 
         plt.title('Histograma do espaço de cores HSV')
@@ -250,10 +258,89 @@ class ImageViewerApp:
         tk_img = ImageTk.PhotoImage(img)
         
         self.place_graph(tk_img)
+        
+        self.zoom_plus_button.config(state="disabled")
+        self.zoom_minus_button.config(state="disabled")
     
 
+    def calculate_glcm(self, image):
+        # Convertendo a imagem para escala de cinza
+        image = color.rgb2gray(image)
+
+        # Reduzindo a escala de cinza para 16 tons
+        image = img_as_ubyte(image)
+        image = image // 16
+
+        # Calculando a matriz de co-ocorrência para diferentes distâncias
+        distances = [1, 2, 4, 8, 16, 32]
+        glcm = graycomatrix(image, distances, [0], 16, symmetric=True, normed=True)
+
+        return glcm
+
     def get_haralick_descriptors(self, image_pil_color):
-        print("Deum bom ainda nn")
+        # Calculating matrix of coocurrence
+        glcm = self.calculate_glcm(image_pil_color)
+            
+        # Calculating Haralick descriptors
+        contrast = graycoprops(glcm, 'contrast')
+        homogeneity = graycoprops(glcm, 'homogeneity')
+
+        # greycoprops function does not calculate entropy, so we will calculate it manually
+        entropy = -np.sum(glcm*np.log2(glcm + np.finfo(float).eps))
+
+        glcm_2d = np.sum(glcm, axis=2)
+
+        # Create a 2x2 grid for plots
+        fig = plt.figure(figsize=(10, 10))
+        gs = gridspec.GridSpec(3, 2)
+
+        # Plot co-occurrence matrix
+        ax1 = fig.add_subplot(gs[0, 1])
+        ax1.imshow(glcm_2d, cmap='hot', interpolation='nearest')
+        ax1.set_title('Matriz de Coocorrência')
+
+        # Plot descriptors
+        ax2 = fig.add_subplot(gs[0, 0])
+        ax2.axis('off')  # Hide axes
+        ax2.text(0, 0.7, f"Contraste: {contrast[0][0]}")
+        ax2.text(0, 0.5, f"Homogeneidade: {homogeneity[0][0]}")
+        ax2.text(0, 0.3, f"Entropia: {entropy}")
+
+        # Save the figure to a BytesIO object
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+
+        # Load the BytesIO object as a PIL image
+        img = Image.open(buf)
+
+        tk_img = ImageTk.PhotoImage(img)
+        
+        self.place_graph(tk_img)
+        
+        self.zoom_plus_button.config(state="disabled")
+        self.zoom_minus_button.config(state="disabled")
+
+# Load the image
+image = cv2.imread('image.jpg')
+
+# Calculate the Hu moments
+gray_hu_moments = calculate_hu_moments(image)
+h_hu_moments, s_hu_moments, v_hu_moments = calculate_hsv_hu_moments(image)
+
+# Create a new PIL image
+img = Image.new('RGB', (500, 500), color = (73, 109, 137))
+
+d = ImageDraw.Draw(img)
+
+# Add the Hu moments to the image
+d.text((10,10), f"Gray Hu Moments: {np.squeeze(gray_hu_moments)}")
+d.text((10,30), f"H Channel Hu Moments: {np.squeeze(h_hu_moments)}")
+d.text((10,50), f"S Channel Hu Moments: {np.squeeze(s_hu_moments)}")
+d.text((10,70), f"V Channel Hu Moments: {np.squeeze(v_hu_moments)}")
+
+img.show()
+
         
 def main():
     # Cria a janela principal da aplicação
