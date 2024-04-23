@@ -1,6 +1,7 @@
 import cv2
 import io
 import mahotas
+import tempfile
 
 import numpy as np
 import tkinter as tk
@@ -8,8 +9,9 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
 from matplotlib import pyplot as plt
-from PIL import Image, ImageTk, ImageDraw
-from skimage.feature import graycomatrix, graycoprops
+from PIL import Image, ImageTk
+
+global zoom_factor
 
 class ImageViewerApp:
     def __init__(self, master):
@@ -58,10 +60,10 @@ class ImageViewerApp:
         self.colored_button = tk.Button(self.button_frame, text="Color (RGB)", width=20, height=2, state="disabled")
         self.colored_button.pack(side=tk.LEFT)
         
-        self.histograms_button = tk.Button(self.button_frame, text="Histogram", width=20, height=2, state = "disabled")
+        self.histograms_button = tk.Button(self.button_frame, text="Gray Hist.", width=20, height=2, state = "disabled")
         self.histograms_button.pack(side=tk.LEFT)
         
-        self.hsv_space_button = tk.Button(self.button_frame, text="HSV Space", width=20, height=2, state = "disabled")
+        self.hsv_space_button = tk.Button(self.button_frame, text="HSV Hist.", width=20, height=2, state = "disabled")
         self.hsv_space_button.pack(side=tk.LEFT)
         
         self.haralick_button = tk.Button(self.button_frame, text="Haralick", width=20, height=2, state = "disabled")
@@ -75,7 +77,17 @@ class ImageViewerApp:
         
         self.open_image()
         
-    def place_image(self, photo):
+    def place_image(self, image_pil):
+        global zoom_factor
+        
+        # Atualizando o tamanho da imagem
+        img_width = int(image_pil.width * zoom_factor)
+        img_height = int(image_pil.height * zoom_factor)
+
+        # Redimensionando a imagem
+        image_resized = image_pil.resize((img_width, img_height))
+        photo = ImageTk.PhotoImage(image_resized)
+        
         # Limpa o canvas antes de adicionar a nova imagem
         self.canvas.delete("all")
 
@@ -92,9 +104,28 @@ class ImageViewerApp:
         self.canvas.image = photo
         
         self.canvas.config(scrollregion=self.canvas.bbox("all"))
+        
+    def place_graph(self, photo):
+        # Limpa o canvas antes de adicionar a nova imagem
+        self.canvas.delete("all")
+
+        global zoom_factor
+
+        # Calcula as coordenadas para centralizar a imagem
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        image_width = photo.width()
+        image_height = photo.height()
+        x_offset = (canvas_width - image_width) // 2
+        y_offset = (canvas_height - image_height) // 2
+
+        # Adiciona a imagem ao canvas centralizada
+        self.canvas.create_image(x_offset, y_offset, anchor="nw", image = photo)
+        self.canvas.image = photo
+        
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))
             
     def open_image(self):
-        
         # file_path = filedialog.askopenfilename()
         file_path = "380936485_726263259498711_6168372829584127727_n.jpg"
         
@@ -102,11 +133,16 @@ class ImageViewerApp:
             image = cv2.imread(file_path)
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             image_pil_base = Image.fromarray(image_rgb)
-            photo = ImageTk.PhotoImage(image_pil_base)
 
-            self.place_image(photo)
+            # Define o fator de zoom para o valor padrão
+            global zoom_factor
+            zoom_factor = 1.0
+
+            self.place_image(image_pil_base)
             
             self.open_button.config(text="Change Image")
+            self.zoom_plus_button.config(state="active", command = lambda: self.zoom_plus(image_pil_base))
+            self.zoom_minus_button.config(state="active", command = lambda: self.zoom_minus(image_pil_base))
             self.gray_scale_button.config(state="active", command= lambda:self.convert_to_grayscale(image_pil_base))
             self.colored_button.config(state="active", command= lambda: self.revert_color(image_pil_base))
             self.histograms_button.config(state="active", command = lambda: self.convert_to_histogram_gray(image_pil_base))
@@ -116,10 +152,19 @@ class ImageViewerApp:
             self.classify_button.config(state="active")
             
     def zoom_plus(self, image_pil_base):
-        print("ainda não implementado")
+        # Aumenta o fator de zoom em 10%
+        global zoom_factor
+        zoom_factor = zoom_factor + 0.1
+
+        self.place_image(image_pil_base)
+
         
     def zoom_minus(self, image_pil_base):
-        print("ainda não implementado")
+        # Aumenta o fator de zoom em 10%
+        global zoom_factor
+        zoom_factor = zoom_factor - 0.1
+
+        self.place_image(image_pil_base)
             
     def convert_to_grayscale(self, image_pil_color):
         # Converta a imagem PIL para uma imagem RGB e depois para uma matriz numpy
@@ -132,16 +177,18 @@ class ImageViewerApp:
         # Converta a imagem em tons de cinza de volta para o formato PIL
         image_pil_gray = Image.fromarray(matrix_gray)
         
-        # Converta a imagem do formato PIL para o formato ImageTK
-        photo_gray = ImageTk.PhotoImage(image_pil_gray)
-        
         # Coloque a imagem na tela
-        self.place_image(photo_gray)
+        self.place_image(image_pil_gray)
+        
+        self.zoom_plus_button.config(state="active", command = lambda: self.zoom_plus(image_pil_gray))
+        self.zoom_minus_button.config(state="active", command = lambda: self.zoom_minus(image_pil_gray))
         
     def revert_color(self, image_pil_color):
-        photo_color = ImageTk.PhotoImage(image_pil_color)
+                
+        self.place_image(image_pil_color)
         
-        self.place_image(photo_color)
+        self.zoom_plus_button.config(state="active", command = lambda: self.zoom_plus(image_pil_color))
+        self.zoom_minus_button.config(state="active", command = lambda: self.zoom_minus(image_pil_color))
         
     def convert_to_histogram_gray(self, image_pil_color):
         # Converte a imagem para tons de cinza
@@ -169,7 +216,7 @@ class ImageViewerApp:
 
         tk_img = ImageTk.PhotoImage(img)
         
-        self.place_image(tk_img)
+        self.place_graph(tk_img)
         
 
     def convert_to_histogram_hsv(self, image_pil_color):
@@ -202,27 +249,11 @@ class ImageViewerApp:
 
         tk_img = ImageTk.PhotoImage(img)
         
-        self.place_image(tk_img)
-        
+        self.place_graph(tk_img)
+    
+
     def get_haralick_descriptors(self, image_pil_color):
-        # Convertendo a imagem em cores para tons de cinza
-        gray_image = image_pil_color.convert('L')
-                
-        # Cria uma cópia da imagem
-        gray_image_copy = np.copy(gray_image)
-
-        # Usa a cópia da imagem na função graycomatrix
-        glcm = graycomatrix(gray_image_copy, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
-
-        # Calcule a homogeneidade a partir da GLCM
-        homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
-        
-        contrast = graycoprops(glcm, "contrast")[0,0]
-        
-        print("Homogeniade: " + str(homogeneity))
-        
-        print("Contraste : " + str(contrast))
-
+        print("Deum bom ainda nn")
         
 def main():
     # Cria a janela principal da aplicação
