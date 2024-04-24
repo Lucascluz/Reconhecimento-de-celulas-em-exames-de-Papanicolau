@@ -80,7 +80,25 @@ class ImageViewerApp:
         self.classify_button = tk.Button(self.button_frame, text="Classify", width=20, height=2, state = "disabled")
         self.classify_button.pack(side=tk.LEFT)
         
-        self.open_image()
+    def place_graph(self, photo):
+        global zoom_factor
+        
+        # Limpa o canvas antes de adicionar a nova imagem
+        self.canvas.delete("all")
+
+        # Calcula as coordenadas para centralizar a imagem
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        image_width = photo.width()
+        image_height = photo.height()
+        x_offset = (canvas_width - image_width) // 2
+        y_offset = (canvas_height - image_height) // 2
+
+        # Adiciona a imagem ao canvas centralizada
+        self.canvas.create_image(x_offset, y_offset, anchor="nw", image = photo)
+        self.canvas.image = photo
+        
+        self.canvas.config(scrollregion=self.canvas.bbox("all"))    
         
     def place_image(self, image_pil):
         global zoom_factor
@@ -110,29 +128,10 @@ class ImageViewerApp:
         
         self.canvas.config(scrollregion=self.canvas.bbox("all"))
         
-    def place_graph(self, photo):
-        # Limpa o canvas antes de adicionar a nova imagem
-        self.canvas.delete("all")
 
-        global zoom_factor
-
-        # Calcula as coordenadas para centralizar a imagem
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        image_width = photo.width()
-        image_height = photo.height()
-        x_offset = (canvas_width - image_width) // 2
-        y_offset = (canvas_height - image_height) // 2
-
-        # Adiciona a imagem ao canvas centralizada
-        self.canvas.create_image(x_offset, y_offset, anchor="nw", image = photo)
-        self.canvas.image = photo
-        
-        self.canvas.config(scrollregion=self.canvas.bbox("all"))
             
     def open_image(self):
-        # file_path = filedialog.askopenfilename()
-        file_path = "380936485_726263259498711_6168372829584127727_n.jpg"
+        file_path = filedialog.askopenfilename()
         
         if file_path:
             image = cv2.imread(file_path)
@@ -202,10 +201,22 @@ class ImageViewerApp:
         # Converte a imagem em tons de cinza para um array NumPy
         gray_array = np.array(gray_img)
 
+        # Reduz a imagem para 16 tons de cinza
+        image = cv2.convertScaleAbs(gray_array, alpha=(15/255))
+
+        # Calcula o histograma
+        histogram = cv2.calcHist([image], [0], None, [16], [0, 16])
+
+        # Normaliza o histograma
+        histogram /= histogram.sum()
+
         # Plota o histograma
-        plt.figure(figsize=(15.5, 7.5))
-        plt.hist(gray_array.ravel(), bins=16, color='gray')
-        plt.title('Histograma de tons de cinza')
+        plt.figure()
+        plt.title("Histograma de Tons de Cinza")
+        plt.xlabel("Tons de Cinza")
+        plt.ylabel("# de Pixels")
+        plt.plot(histogram)
+        plt.xlim([0, 16])
 
         # Cria um objeto BytesIO para salvar o gráfico
         buf = io.BytesIO()
@@ -228,20 +239,26 @@ class ImageViewerApp:
         
 
     def convert_to_histogram_hsv(self, image_pil_color):
-        # Converte a imagem para o espaço de cores HSV
-        hsv_img = image_pil_color.convert('HSV')
+        # Converte a imagem para um array NumPy
+        array = np.array(image_pil_color)
+        
+        # Convert the image to HSV
+        hsv = cv2.cvtColor(array, cv2.COLOR_BGR2HSV)
 
-        # Converte a imagem HSV para um array NumPy
-        hsv_array = np.array(hsv_img)
+        # Split the HSV image into H, S and V channels
+        h, s, v = cv2.split(hsv)
 
-        # Plota o histograma para cada canal H, S e V
-        plt.figure(figsize=(15.5, 7.5))
+        # Calculate the 2D histogram for the H and V channels
+        hist = cv2.calcHist([v, h], [0, 1], None, [8, 16], [0, 180, 0, 256])
 
-        for i, (channel, color) in enumerate(zip('HSV', 'bgr')):
-            histogram, bins = np.histogram(hsv_array[:, :, i], bins=16, range=(0, 256))
-            plt.plot(bins[:-1], histogram, color=color)
+        # Normalize the histogram
+        cv2.normalize(hist, hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
 
-        plt.title('Histograma do espaço de cores HSV')
+        # Plot the 2D histogram
+        plt.imshow(hist, interpolation='nearest')
+        plt.title('2D Color Histogram')
+        plt.xlabel('V')
+        plt.ylabel('H')
 
         # Cria um objeto BytesIO para salvar o gráfico
         buf = io.BytesIO()
@@ -261,50 +278,38 @@ class ImageViewerApp:
         
         self.zoom_plus_button.config(state="disabled")
         self.zoom_minus_button.config(state="disabled")
-    
-
-    def calculate_glcm(self, image):
-        # Convertendo a imagem para escala de cinza
-        image = color.rgb2gray(image)
-
-        # Reduzindo a escala de cinza para 16 tons
-        image = img_as_ubyte(image)
-        image = image // 16
-
-        # Calculando a matriz de co-ocorrência para diferentes distâncias
-        distances = [1, 2, 4, 8, 16, 32]
-        glcm = graycomatrix(image, distances, [0], 16, symmetric=True, normed=True)
-
-        return glcm
 
     def get_haralick_descriptors(self, image_pil_color):
-        # Calculating matrix of coocurrence
-        glcm = self.calculate_glcm(image_pil_color)
-            
-        # Calculating Haralick descriptors
-        contrast = graycoprops(glcm, 'contrast')
-        homogeneity = graycoprops(glcm, 'homogeneity')
+        # Converte a imagem para um array NumPy
+        array = np.array(image_pil_color)
+        
+        image_rgb = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
 
-        # greycoprops function does not calculate entropy, so we will calculate it manually
-        entropy = -np.sum(glcm*np.log2(glcm + np.finfo(float).eps))
+        # Convertendo a imagem RGB para tons de cinza
+        image_gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
 
-        glcm_2d = np.sum(glcm, axis=2)
+        # Reduzindo a imagem para 16 tons de cinza
+        image_gray //= 16
 
-        # Create a 2x2 grid for plots
-        fig = plt.figure(figsize=(10, 10))
-        gs = gridspec.GridSpec(3, 2)
+        # Convertendo a imagem para um array numpy
+        image = np.array(image_gray)
 
-        # Plot co-occurrence matrix
-        ax1 = fig.add_subplot(gs[0, 1])
-        ax1.imshow(glcm_2d, cmap='hot', interpolation='nearest')
-        ax1.set_title('Matriz de Coocorrência')
+        distances = [1, 2, 4, 8, 16, 31]
+        angle = 0  # Ângulo constante
 
-        # Plot descriptors
-        ax2 = fig.add_subplot(gs[0, 0])
-        ax2.axis('off')  # Hide axes
-        ax2.text(0, 0.7, f"Contraste: {contrast[0][0]}")
-        ax2.text(0, 0.5, f"Homogeneidade: {homogeneity[0][0]}")
-        ax2.text(0, 0.3, f"Entropia: {entropy}")
+        fig, axs = plt.subplots(2, 3, figsize=(12, 8))  # Altere para 2 linhas e 3 colunas
+
+        for i, d in enumerate(distances):
+            row = i // 3  # Determina a linha do subplot
+            col = i % 3   # Determina a coluna do subplot
+            glcm = graycomatrix(image, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
+            contrast = graycoprops(glcm, 'contrast')[0, 0]
+            homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
+            entropy = -np.sum(glcm*np.log2(glcm + np.finfo(float).eps))
+            axs[row, col].imshow(glcm[:, :, 0, 0], cmap="gray")  # Adicione os parâmetros vmin e vmax
+            axs[row, col].set_title(f'Distância: {d}\nContraste: {contrast:.2f}\nHomogeneidade: {homogeneity:.2f}\nEntropia: {entropy:.2f}')
+
+        plt.tight_layout()
 
         # Save the figure to a BytesIO object
         buf = io.BytesIO()
@@ -318,29 +323,15 @@ class ImageViewerApp:
         
         self.place_graph(tk_img)
         
+        self.open_button.config(text="Change Image")
         self.zoom_plus_button.config(state="disabled")
         self.zoom_minus_button.config(state="disabled")
-
-# Load the image
-image = cv2.imread('image.jpg')
-
-# Calculate the Hu moments
-gray_hu_moments = calculate_hu_moments(image)
-h_hu_moments, s_hu_moments, v_hu_moments = calculate_hsv_hu_moments(image)
-
-# Create a new PIL image
-img = Image.new('RGB', (500, 500), color = (73, 109, 137))
-
-d = ImageDraw.Draw(img)
-
-# Add the Hu moments to the image
-d.text((10,10), f"Gray Hu Moments: {np.squeeze(gray_hu_moments)}")
-d.text((10,30), f"H Channel Hu Moments: {np.squeeze(h_hu_moments)}")
-d.text((10,50), f"S Channel Hu Moments: {np.squeeze(s_hu_moments)}")
-d.text((10,70), f"V Channel Hu Moments: {np.squeeze(v_hu_moments)}")
-
-img.show()
-
+        self.gray_scale_button.config(state="active")
+        self.histograms_button.config(state="active") 
+        self.hsv_space_button.config(state="active") 
+        self.haralick_button.config(state="disabled")
+        self.hu_invariants_button.config(state="active")
+        self.classify_button.config(state="active")
         
 def main():
     # Cria a janela principal da aplicação
