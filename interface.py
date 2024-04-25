@@ -127,8 +127,6 @@ class ImageViewerApp:
         self.canvas.image = photo
         
         self.canvas.config(scrollregion=self.canvas.bbox("all"))
-        
-
             
     def open_image(self):
         file_path = filedialog.askopenfilename()
@@ -152,7 +150,7 @@ class ImageViewerApp:
             self.histograms_button.config(state="active", command = lambda: self.convert_to_histogram_gray(image_pil_base))
             self.hsv_space_button.config(state="active", command= lambda: self.convert_to_histogram_hsv(image_pil_base))
             self.haralick_button.config(state="active", command = lambda: self.get_haralick_descriptors(image_pil_base))
-            self.hu_invariants_button.config(state="active")
+            self.hu_invariants_button.config(state="active", command= lambda: self.hu_invariants(image_pil_base))
             self.classify_button.config(state="active")
             
     def zoom_plus(self, image_pil_base):
@@ -184,15 +182,29 @@ class ImageViewerApp:
         # Coloque a imagem na tela
         self.place_image(image_pil_gray)
         
-        self.zoom_plus_button.config(state="active", command = lambda: self.zoom_plus(image_pil_gray))
-        self.zoom_minus_button.config(state="active", command = lambda: self.zoom_minus(image_pil_gray))
+        self.zoom_plus_button.config(state="active")
+        self.zoom_minus_button.config(state="active")
+        self.gray_scale_button.config(state="disabled")
+        self.colored_button.config(state="active")
+        self.histograms_button.config(state="active") 
+        self.hsv_space_button.config(state="active") 
+        self.haralick_button.config(state="active")
+        self.hu_invariants_button.config(state="active")
+        self.classify_button.config(state="active")
         
     def revert_color(self, image_pil_color):
                 
         self.place_image(image_pil_color)
         
-        self.zoom_plus_button.config(state="active", command = lambda: self.zoom_plus(image_pil_color))
-        self.zoom_minus_button.config(state="active", command = lambda: self.zoom_minus(image_pil_color))
+        self.zoom_plus_button.config(state="active")
+        self.zoom_minus_button.config(state="active")
+        self.gray_scale_button.config(state="active")
+        self.colored_button.config(state="disabled")
+        self.histograms_button.config(state="active") 
+        self.hsv_space_button.config(state="active") 
+        self.haralick_button.config(state="active")
+        self.hu_invariants_button.config(state="active")
+        self.classify_button.config(state="active")
         
     def convert_to_histogram_gray(self, image_pil_color):
         # Converte a imagem para tons de cinza
@@ -207,16 +219,14 @@ class ImageViewerApp:
         # Calcula o histograma
         histogram = cv2.calcHist([image], [0], None, [16], [0, 16])
 
-        # Normaliza o histograma
-        histogram /= histogram.sum()
-
         # Plota o histograma
-        plt.figure()
+        # Define o tamanho da figura
+        plt.figure(figsize=(12, 7))  # Você pode ajustar esses valores conforme necessário
         plt.title("Histograma de Tons de Cinza")
         plt.xlabel("Tons de Cinza")
-        plt.ylabel("# de Pixels")
+        plt.ylabel("Quantidade de Ocorrências")
         plt.plot(histogram)
-        plt.xlim([0, 16])
+        plt.xlim([0, 15])
 
         # Cria um objeto BytesIO para salvar o gráfico
         buf = io.BytesIO()
@@ -236,6 +246,13 @@ class ImageViewerApp:
         
         self.zoom_plus_button.config(state="disabled")
         self.zoom_minus_button.config(state="disabled")
+        self.gray_scale_button.config(state="active")
+        self.colored_button.config(state="active")
+        self.histograms_button.config(state="disabled") 
+        self.hsv_space_button.config(state="active") 
+        self.haralick_button.config(state="active")
+        self.hu_invariants_button.config(state="active")
+        self.classify_button.config(state="active")
         
 
     def convert_to_histogram_hsv(self, image_pil_color):
@@ -254,6 +271,9 @@ class ImageViewerApp:
         # Normalize the histogram
         cv2.normalize(hist, hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
 
+        # Define o tamanho da figura
+        plt.figure(figsize=(12, 7))  # Você pode ajustar esses valores conforme necessário
+
         # Plot the 2D histogram
         plt.imshow(hist, interpolation='nearest')
         plt.title('2D Color Histogram')
@@ -264,7 +284,7 @@ class ImageViewerApp:
         buf = io.BytesIO()
 
         # Salva o gráfico no objeto BytesIO
-        plt.savefig(buf, format='png')
+        plt.savefig(buf, format='png', bbox_inches='tight')  # Adiciona bbox_inches='tight' para remover espaços em branco
 
         # Move o cursor do objeto BytesIO para o início
         buf.seek(0)
@@ -278,6 +298,14 @@ class ImageViewerApp:
         
         self.zoom_plus_button.config(state="disabled")
         self.zoom_minus_button.config(state="disabled")
+        self.gray_scale_button.config(state="active")
+        self.colored_button.config(state="active")
+        self.histograms_button.config(state="active") 
+        self.hsv_space_button.config(state="disabled") 
+        self.haralick_button.config(state="active")
+        self.hu_invariants_button.config(state="active")
+        self.classify_button.config(state="active")
+
 
     def get_haralick_descriptors(self, image_pil_color):
         # Converte a imagem para um array NumPy
@@ -297,7 +325,7 @@ class ImageViewerApp:
         distances = [1, 2, 4, 8, 16, 31]
         angle = 0  # Ângulo constante
 
-        fig, axs = plt.subplots(2, 3, figsize=(12, 8))  # Altere para 2 linhas e 3 colunas
+        fig, axs = plt.subplots(2, 3, figsize=(12, 7))  # Altere para 2 linhas e 3 colunas
 
         for i, d in enumerate(distances):
             row = i // 3  # Determina a linha do subplot
@@ -323,14 +351,73 @@ class ImageViewerApp:
         
         self.place_graph(tk_img)
         
-        self.open_button.config(text="Change Image")
         self.zoom_plus_button.config(state="disabled")
         self.zoom_minus_button.config(state="disabled")
         self.gray_scale_button.config(state="active")
+        self.colored_button.config(state="active")
         self.histograms_button.config(state="active") 
         self.hsv_space_button.config(state="active") 
         self.haralick_button.config(state="disabled")
         self.hu_invariants_button.config(state="active")
+        self.classify_button.config(state="active")
+        
+    def hu_invariants(self, image_pil_base):
+        # Converte a imagem para um array NumPy
+        array = np.array(image_pil_base)
+        
+        # Converter a imagem para tons de cinza
+        imagem_cinza = cv2.cvtColor(array, cv2.COLOR_BGR2GRAY)
+
+        # Calcular os momentos invariantes de Hu para a imagem em tons de cinza
+        momentos_hu_cinza = cv2.HuMoments(cv2.moments(imagem_cinza)).flatten()
+
+        # Converter a imagem para o espaço de cores HSV
+        imagem_hsv = cv2.cvtColor(array, cv2.COLOR_BGR2HSV)
+
+        # Calcular os momentos invariantes de Hu para cada canal do modelo HSV
+        momentos_hu_hsv = [cv2.HuMoments(cv2.moments(imagem_hsv[:,:,i])).flatten() for i in range(3)]
+
+        fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(12, 7))
+
+        # Definir as cores para as caixas de texto
+        cores = ['gray', 'red', 'green', 'blue']
+
+        # Exibir os momentos invariantes de Hu para a imagem em tons de cinza
+        axs[0, 0].text(0.5, 0.0, '\n'.join(map(str, momentos_hu_cinza)), ha='center', va='top', size=25, bbox=dict(boxstyle='round', facecolor=cores[0], alpha=0.2))
+        axs[0, 0].axis('off')
+        axs[0, 0].set_title(f'Canal em tons de Cinza')
+
+        # Exibir os momentos invariantes de Hu para os 3 canais do modelo HSV
+        for i, momentos_hu in enumerate(momentos_hu_hsv, start=1):
+            row = i // 2
+            col = i % 2
+            axs[row, col].text(0.5, 0.0, '\n'.join(map(str, momentos_hu)), ha='center', va='top', size=25, bbox=dict(boxstyle='round', facecolor=cores[i], alpha=0.2))
+            axs[row, col].axis('off')
+            axs[row, col].set_title(f'Canal {i} do modelo HSV')
+            
+        plt.subplots_adjust(hspace=0.2, wspace=0.5)
+        plt.tight_layout()
+        
+        # Save the figure to a BytesIO object
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+
+        # Load the BytesIO object as a PIL image
+        img = Image.open(buf)
+
+        tk_img = ImageTk.PhotoImage(img)
+        
+        self.place_graph(tk_img)
+        
+        self.zoom_plus_button.config(state="disabled")
+        self.zoom_minus_button.config(state="disabled")
+        self.gray_scale_button.config(state="active")
+        self.colored_button.config(state="active")
+        self.histograms_button.config(state="active") 
+        self.hsv_space_button.config(state="active") 
+        self.haralick_button.config(state="active")
+        self.hu_invariants_button.config(state="disabled")
         self.classify_button.config(state="active")
         
 def main():
