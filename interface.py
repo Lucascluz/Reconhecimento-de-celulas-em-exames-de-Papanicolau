@@ -16,6 +16,13 @@ from skimage import color
 from skimage.util import img_as_ubyte
 from skimage.feature import graycomatrix, graycoprops
 
+import numpy as np
+import cv2
+from PIL import Image
+from skimage.feature import graycomatrix, graycoprops
+import joblib
+from sklearn.preprocessing import StandardScaler
+
 global zoom_factor
 
 class ImageViewerApp:
@@ -151,7 +158,8 @@ class ImageViewerApp:
             self.hsv_space_button.config(state="active", command= lambda: self.convert_to_histogram_hsv(image_pil_base))
             self.haralick_button.config(state="active", command = lambda: self.get_haralick_descriptors(image_pil_base))
             self.hu_invariants_button.config(state="active", command= lambda: self.hu_invariants(image_pil_base))
-            self.classify_button.config(state="active")
+            self.classify_button.config(state="active", command= lambda: self.classify(image_pil_base, "best_svm_model_6_catgoties.joblib","best_svm_model_binary.joblib"))
+            
             
     def zoom_plus(self, image_pil_base):
         # Aumenta o fator de zoom em 10%
@@ -419,7 +427,67 @@ class ImageViewerApp:
         self.haralick_button.config(state="active")
         self.hu_invariants_button.config(state="disabled")
         self.classify_button.config(state="active")
+
+
+    def classify(self, image_pil_color, model_path_six="best_svm_model_6_catgoties.joblib",model_path_binary="best_svm_model_binary.joblib"):
+    # Load the pre-trained SVM model
+        model_six = joblib.load(model_path_six)
+        model_binary = joblib.load(model_path_binary)
+    
+    # Initialize a scaler (assuming the scaler was saved and loaded similarly)
+    # Note: This requires the scaler to be saved during the model training process
+        scaler = StandardScaler()  # This needs to be replaced with loading the actual scaler used during training
+
+    # Convert PIL image to NumPy array
+        array = np.array(image_pil_color)
+    
+    # Convert BGR to RGB
+        image_rgb = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
+    
+    # Convert RGB to grayscale
+        image_gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
+    
+    # Reduce image to 16 gray levels
+        image_gray //= 16
+    
+    # Define distances and angle for Haralick descriptors
+        distances = [1, 2, 4, 8, 16, 31]
+        angle = 0
+    
+        features = []
+    
+    # Compute GLCM and extract Haralick features
+        for d in distances:
+            glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
+            contrast = graycoprops(glcm, 'contrast')[0, 0]
+            homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
+            entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
         
+        # Collect the features
+            features.extend([contrast, homogeneity, entropy])
+    
+    # Convert features list to numpy array and reshape for prediction
+        features = np.array(features).reshape(1, -1)  # Reshape for a single sample
+    
+    # Apply scaling (assuming the scaler was trained during model training)    
+        #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
+    
+    # Predict the category of the image
+        #y_pred = model.predict(features_scaled)
+        # Predict the category of the image using both models
+        y_pred_six = model_six.predict(features)
+        y_pred_binary = model_binary.predict(features)
+
+    # Display predictions using matplotlib
+        fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
+        prediction_text = f'6 Categories Prediction: {y_pred_six[0]}\nBinary Prediction: {y_pred_binary[0]}'
+        ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
+        ax.axis('off')
+    
+        plt.tight_layout()
+        plt.show()
+
+
 def main():
     # Cria a janela principal da aplicação
     root = tk.Tk()
