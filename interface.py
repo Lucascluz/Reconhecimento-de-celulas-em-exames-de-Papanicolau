@@ -1,26 +1,18 @@
-import os
-import cv2
+# Built-in libraries
 import io
-import mahotas
-import tempfile
-
-import numpy as np
 import tkinter as tk
+from tkinter import filedialog, ttk
 
-from tkinter import filedialog
-from tkinter import ttk
+# Third-party libraries
+import cv2
+import joblib
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import gridspec as gridspec
+from matplotlib.widgets import Button
 from PIL import Image, ImageTk
-from skimage import color
-from skimage.util import img_as_ubyte
+import skimage
 from skimage.feature import graycomatrix, graycoprops
-
-import numpy as np
-import cv2
-from PIL import Image
-from skimage.feature import graycomatrix, graycoprops
-import joblib
 from sklearn.preprocessing import StandardScaler
 
 global zoom_factor
@@ -31,69 +23,70 @@ class ImageViewerApp:
         self.master.title("Image Viewer")
 
         self.frame = tk.Frame(self.master)
-        self.frame.pack(fill=tk.BOTH, expand=True,)
+        self.frame.pack(fill=tk.BOTH, expand=True)
 
         self.canvas = tk.Canvas(self.frame)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True,)
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         self.image_frame = tk.Frame(self.canvas)
-        self.canvas.create_window((0, 0), window=self.image_frame, anchor=tk.NW, )
+        self.canvas.create_window((0, 0), window=self.image_frame, anchor=tk.NW)
 
-        self.image_label = tk.Label(self.image_frame, )
+        self.image_label = tk.Label(self.image_frame)
         self.image_label.pack()
             
         self.scrollbarVertical = ttk.Scrollbar(self.frame, orient=tk.VERTICAL, command=self.canvas.yview)
         self.scrollbarVertical.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.configure(yscrollcommand=self.scrollbarVertical.set)
 
-        self.scrollbarHorizontal = ttk.Scrollbar(self.master, orient=tk.HORIZONTAL, command=self.canvas.xview, )
+        self.scrollbarHorizontal = ttk.Scrollbar(self.master, orient=tk.HORIZONTAL, command=self.canvas.xview)
         self.scrollbarHorizontal.pack(side=tk.BOTTOM, fill=tk.X)
         self.canvas.configure(xscrollcommand=self.scrollbarHorizontal.set)
 
-        # Criando um frame para os botões adicionais
         self.button_frame = tk.Frame(self.master)
         self.button_frame.pack()
-        
-        self.open_button = tk.Button(self.button_frame, text="Open Image", command=self.open_image, width=20, height=2)
+
+        self.create_buttons()
+        self.image_pil_base = None
+        self.co_matrices = None
+        self.current_matrix_index = 0
+
+    def create_buttons(self):
+        self.open_button = tk.Button(self.button_frame, text="Open Image", command=self.open_image, width=10, height=2)
         self.open_button.pack(side=tk.LEFT)
         
-        self.zoom_plus_button = tk.Button(self.button_frame, text="+", width=6, height=2, state="disabled")
+        self.zoom_plus_button = tk.Button(self.button_frame, text="+", width=5, height=2, state="disabled", command=self.zoom_plus)
         self.zoom_plus_button.pack(side=tk.LEFT)
         
-        self.zoom_minus_button = tk.Button(self.button_frame, text="-", width=6, height=2, state="disabled")
+        self.zoom_minus_button = tk.Button(self.button_frame, text="-", width=5, height=2, state="disabled", command=self.zoom_minus)
         self.zoom_minus_button.pack(side=tk.LEFT)
 
-        # Organizando os botões adicionais lado a lado
-        
-        # Botão para converter a imagem para tons de cinza
-        self.gray_scale_button = tk.Button(self.button_frame, text="Gray Scale", width=20, height=2, state="disabled")
+        self.gray_scale_button = tk.Button(self.button_frame, text="Gray Scale", width=10, height=2, state="disabled", command=self.convert_to_grayscale)
         self.gray_scale_button.pack(side=tk.LEFT)
         
-        self.colored_button = tk.Button(self.button_frame, text="Color (RGB)", width=20, height=2, state="disabled")
+        self.colored_button = tk.Button(self.button_frame, text="Color (RGB)", width=10, height=2, state="disabled", command=self.revert_color)
         self.colored_button.pack(side=tk.LEFT)
         
-        self.histograms_button = tk.Button(self.button_frame, text="Gray Hist.", width=20, height=2, state = "disabled")
+        self.histograms_button = tk.Button(self.button_frame, text="Gray Hist.", width=10, height=2, state="disabled", command=self.convert_to_histogram_gray)
         self.histograms_button.pack(side=tk.LEFT)
         
-        self.hsv_space_button = tk.Button(self.button_frame, text="HSV Hist.", width=20, height=2, state = "disabled")
+        self.hsv_space_button = tk.Button(self.button_frame, text="HSV Hist.", width=10, height=2, state="disabled", command=self.convert_to_histogram_hsv)
         self.hsv_space_button.pack(side=tk.LEFT)
         
-        self.haralick_button = tk.Button(self.button_frame, text="Haralick", width=20, height=2, state = "disabled")
+        self.co_button = tk.Button(self.button_frame, text="Co-occurrence Matrices",width=10, height=2, state="disabled", command=self.co_occurrence_matrices)
+        self.co_button.pack()
+        
+        self.haralick_button = tk.Button(self.button_frame, text="Haralick", width=10, height=2, state="disabled", command=self.get_haralick_descriptors)
         self.haralick_button.pack(side=tk.LEFT)
         
-        self.hu_invariants_button = tk.Button(self.button_frame, text="Hu Invariants", width=20, height=2, state = "disabled")
+        self.hu_invariants_button = tk.Button(self.button_frame, text="Hu Invariants", width=10, height=2, state="disabled", command=self.hu_invariants)
         self.hu_invariants_button.pack(side=tk.LEFT)
         
-        self.classify_button = tk.Button(self.button_frame, text="Classify", width=20, height=2, state = "disabled")
+        self.classify_button = tk.Button(self.button_frame, text="Classify", width=10, height=2, state="disabled", command=self.classify)
         self.classify_button.pack(side=tk.LEFT)
-        
+
     def place_graph(self, photo):
-        global zoom_factor
-        
-        # Limpa o canvas antes de adicionar a nova imagem
         self.canvas.delete("all")
 
-        # Calcula as coordenadas para centralizar a imagem
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         image_width = photo.width()
@@ -101,27 +94,18 @@ class ImageViewerApp:
         x_offset = (canvas_width - image_width) // 2
         y_offset = (canvas_height - image_height) // 2
 
-        # Adiciona a imagem ao canvas centralizada
-        self.canvas.create_image(x_offset, y_offset, anchor="nw", image = photo)
+        self.canvas.create_image(x_offset, y_offset, anchor="nw", image=photo)
         self.canvas.image = photo
-        
         self.canvas.config(scrollregion=self.canvas.bbox("all"))    
-        
+
     def place_image(self, image_pil):
-        global zoom_factor
-        
-        # Atualizando o tamanho da imagem
         img_width = int(image_pil.width * zoom_factor)
         img_height = int(image_pil.height * zoom_factor)
-
-        # Redimensionando a imagem
         image_resized = image_pil.resize((img_width, img_height))
         photo = ImageTk.PhotoImage(image_resized)
-        
-        # Limpa o canvas antes de adicionar a nova imagem
+
         self.canvas.delete("all")
 
-        # Calcula as coordenadas para centralizar a imagem
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         image_width = photo.width()
@@ -129,375 +113,226 @@ class ImageViewerApp:
         x_offset = (canvas_width - image_width) // 2
         y_offset = (canvas_height - image_height) // 2
 
-        # Adiciona a imagem ao canvas centralizada
-        self.canvas.create_image(x_offset, y_offset, anchor="nw", image = photo)
+        self.canvas.create_image(x_offset, y_offset, anchor="nw", image=photo)
         self.canvas.image = photo
-        
         self.canvas.config(scrollregion=self.canvas.bbox("all"))
             
     def open_image(self):
         file_path = filedialog.askopenfilename()
-        
         if file_path:
             image = cv2.imread(file_path)
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            image_pil_base = Image.fromarray(image_rgb)
+            self.image_pil_base = Image.fromarray(image_rgb)
 
-            # Define o fator de zoom para o valor padrão
             global zoom_factor
             zoom_factor = 1.0
 
-            self.place_image(image_pil_base)
+            self.place_image(self.image_pil_base)
             
             self.open_button.config(text="Change Image")
-            self.zoom_plus_button.config(state="active", command = lambda: self.zoom_plus(image_pil_base))
-            self.zoom_minus_button.config(state="active", command = lambda: self.zoom_minus(image_pil_base))
-            self.gray_scale_button.config(state="active", command= lambda:self.convert_to_grayscale(image_pil_base))
-            self.colored_button.config(state="active", command= lambda: self.revert_color(image_pil_base))
-            self.histograms_button.config(state="active", command = lambda: self.convert_to_histogram_gray(image_pil_base))
-            self.hsv_space_button.config(state="active", command= lambda: self.convert_to_histogram_hsv(image_pil_base))
-            self.haralick_button.config(state="active", command = lambda: self.get_haralick_descriptors(image_pil_base))
-            self.hu_invariants_button.config(state="active", command= lambda: self.hu_invariants(image_pil_base))
-            self.classify_button.config(state="active", command= lambda: self.classify(image_pil_base, "best_svm_model_6_catgoties.joblib","best_svm_model_binary.joblib"))
-            
-            
-    def zoom_plus(self, image_pil_base):
-        # Aumenta o fator de zoom em 10%
-        global zoom_factor
-        zoom_factor = zoom_factor + 0.1
+            self.enable_buttons()
 
-        self.place_image(image_pil_base)
-
-        
-    def zoom_minus(self, image_pil_base):
-        # Aumenta o fator de zoom em 10%
-        global zoom_factor
-        zoom_factor = zoom_factor - 0.1
-
-        self.place_image(image_pil_base)
-            
-    def convert_to_grayscale(self, image_pil_color):
-        # Converta a imagem PIL para uma imagem RGB e depois para uma matriz numpy
-        image_pil_rgb = image_pil_color.convert('RGB')
-        matrix_rgb = np.array(image_pil_rgb)
-
-        # Use o OpenCV para converter a imagem para tons de cinza
-        matrix_gray = cv2.cvtColor(matrix_rgb, cv2.COLOR_RGB2GRAY)
-
-        # Converta a imagem em tons de cinza de volta para o formato PIL
-        image_pil_gray = Image.fromarray(matrix_gray)
-        
-        # Coloque a imagem na tela
-        self.place_image(image_pil_gray)
-        
-        self.zoom_plus_button.config(state="active")
-        self.zoom_minus_button.config(state="active")
-        self.gray_scale_button.config(state="disabled")
-        self.colored_button.config(state="active")
-        self.histograms_button.config(state="active") 
-        self.hsv_space_button.config(state="active") 
-        self.haralick_button.config(state="active")
-        self.hu_invariants_button.config(state="active")
-        self.classify_button.config(state="active")
-        
-    def revert_color(self, image_pil_color):
-                
-        self.place_image(image_pil_color)
-        
+    def enable_buttons(self):
         self.zoom_plus_button.config(state="active")
         self.zoom_minus_button.config(state="active")
         self.gray_scale_button.config(state="active")
-        self.colored_button.config(state="disabled")
-        self.histograms_button.config(state="active") 
-        self.hsv_space_button.config(state="active") 
-        self.haralick_button.config(state="active")
-        self.hu_invariants_button.config(state="active")
-        self.classify_button.config(state="active")
-        
-    def convert_to_histogram_gray(self, image_pil_color):
-        # Converte a imagem para tons de cinza
-        gray_img = image_pil_color.convert('L')
-
-        # Converte a imagem em tons de cinza para um array NumPy
-        gray_array = np.array(gray_img)
-
-        # Reduz a imagem para 16 tons de cinza
-        image = cv2.convertScaleAbs(gray_array, alpha=(15/255))
-
-        # Calcula o histograma
-        histogram = cv2.calcHist([image], [0], None, [16], [0, 16])
-
-        # Plota o histograma
-        # Define o tamanho da figura
-        plt.figure(figsize=(12, 7))  # Você pode ajustar esses valores conforme necessário
-        plt.title("Histograma de Tons de Cinza")
-        plt.xlabel("Tons de Cinza")
-        plt.ylabel("Quantidade de Ocorrências")
-        plt.plot(histogram)
-        plt.xlim([0, 15])
-
-        # Cria um objeto BytesIO para salvar o gráfico
-        buf = io.BytesIO()
-
-        # Salva o gráfico no objeto BytesIO
-        plt.savefig(buf, format='png')
-
-        # Move o cursor do objeto BytesIO para o início
-        buf.seek(0)
-
-        # Carrega o objeto BytesIO como uma imagem PIL
-        img = Image.open(buf)
-
-        tk_img = ImageTk.PhotoImage(img)
-        
-        self.place_graph(tk_img)
-        
-        self.zoom_plus_button.config(state="disabled")
-        self.zoom_minus_button.config(state="disabled")
-        self.gray_scale_button.config(state="active")
         self.colored_button.config(state="active")
-        self.histograms_button.config(state="disabled") 
-        self.hsv_space_button.config(state="active") 
-        self.haralick_button.config(state="active")
-        self.hu_invariants_button.config(state="active")
-        self.classify_button.config(state="active")
-        
-
-    def convert_to_histogram_hsv(self, image_pil_color):
-        # Converte a imagem para um array NumPy
-        array = np.array(image_pil_color)
-        
-        # Convert the image to HSV
-        hsv = cv2.cvtColor(array, cv2.COLOR_BGR2HSV)
-
-        # Split the HSV image into H, S and V channels
-        h, s, v = cv2.split(hsv)
-
-        # Calculate the 2D histogram for the H and V channels
-        hist = cv2.calcHist([v, h], [0, 1], None, [8, 16], [0, 180, 0, 256])
-
-        # Normalize the histogram
-        cv2.normalize(hist, hist, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX)
-
-        # Define o tamanho da figura
-        plt.figure(figsize=(12, 7))  # Você pode ajustar esses valores conforme necessário
-
-        # Plot the 2D histogram
-        plt.imshow(hist, interpolation='nearest')
-        plt.title('2D Color Histogram')
-        plt.xlabel('V')
-        plt.ylabel('H')
-
-        # Cria um objeto BytesIO para salvar o gráfico
-        buf = io.BytesIO()
-
-        # Salva o gráfico no objeto BytesIO
-        plt.savefig(buf, format='png', bbox_inches='tight')  # Adiciona bbox_inches='tight' para remover espaços em branco
-
-        # Move o cursor do objeto BytesIO para o início
-        buf.seek(0)
-
-        # Carrega o objeto BytesIO como uma imagem PIL
-        img = Image.open(buf)
-
-        tk_img = ImageTk.PhotoImage(img)
-        
-        self.place_graph(tk_img)
-        
-        self.zoom_plus_button.config(state="disabled")
-        self.zoom_minus_button.config(state="disabled")
-        self.gray_scale_button.config(state="active")
-        self.colored_button.config(state="active")
-        self.histograms_button.config(state="active") 
-        self.hsv_space_button.config(state="disabled") 
+        self.histograms_button.config(state="active")
+        self.hsv_space_button.config(state="active")
+        self.co_button.config(state="active")
         self.haralick_button.config(state="active")
         self.hu_invariants_button.config(state="active")
         self.classify_button.config(state="active")
 
+    def zoom_plus(self):
+        global zoom_factor
+        zoom_factor += 0.1
+        self.place_image(self.image_pil_base)
 
-    def get_haralick_descriptors(self, image_pil_color):
-        # Converte a imagem para um array NumPy
-        array = np.array(image_pil_color)
-        
-        image_rgb = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
-
-        # Convertendo a imagem RGB para tons de cinza
-        image_gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
-
-        # Reduzindo a imagem para 16 tons de cinza
-        image_gray //= 16
-
-        # Convertendo a imagem para um array numpy
-        image = np.array(image_gray)
-
-        distances = [1, 2, 4, 8, 16, 31]
-        angle = 0  # Ângulo constante
-
-        fig, axs = plt.subplots(2, 3, figsize=(12, 7))  # Altere para 2 linhas e 3 colunas
-
-        for i, d in enumerate(distances):
-            row = i // 3  # Determina a linha do subplot
-            col = i % 3   # Determina a coluna do subplot
-            glcm = graycomatrix(image, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
-            contrast = graycoprops(glcm, 'contrast')[0, 0]
-            homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
-            entropy = -np.sum(glcm*np.log2(glcm + np.finfo(float).eps))
-            axs[row, col].imshow(glcm[:, :, 0, 0], cmap="gray")  # Adicione os parâmetros vmin e vmax
-            axs[row, col].set_title(f'Distância: {d}\nContraste: {contrast:.2f}\nHomogeneidade: {homogeneity:.2f}\nEntropia: {entropy:.2f}')
-
-        plt.tight_layout()
-
-        # Save the figure to a BytesIO object
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-
-        # Load the BytesIO object as a PIL image
-        img = Image.open(buf)
-
-        tk_img = ImageTk.PhotoImage(img)
-        
-        self.place_graph(tk_img)
-        
-        self.zoom_plus_button.config(state="disabled")
-        self.zoom_minus_button.config(state="disabled")
-        self.gray_scale_button.config(state="active")
-        self.colored_button.config(state="active")
-        self.histograms_button.config(state="active") 
-        self.hsv_space_button.config(state="active") 
-        self.haralick_button.config(state="disabled")
-        self.hu_invariants_button.config(state="active")
-        self.classify_button.config(state="active")
-        
-    def hu_invariants(self, image_pil_base):
-        # Converte a imagem para um array NumPy
-        array = np.array(image_pil_base)
-        
-        # Converter a imagem para tons de cinza
-        imagem_cinza = cv2.cvtColor(array, cv2.COLOR_BGR2GRAY)
-
-        # Calcular os momentos invariantes de Hu para a imagem em tons de cinza
-        momentos_hu_cinza = cv2.HuMoments(cv2.moments(imagem_cinza)).flatten()
-
-        # Converter a imagem para o espaço de cores HSV
-        imagem_hsv = cv2.cvtColor(array, cv2.COLOR_BGR2HSV)
-
-        # Calcular os momentos invariantes de Hu para cada canal do modelo HSV
-        momentos_hu_hsv = [cv2.HuMoments(cv2.moments(imagem_hsv[:,:,i])).flatten() for i in range(3)]
-
-        fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(12, 7))
-
-        # Definir as cores para as caixas de texto
-        cores = ['gray', 'red', 'green', 'blue']
-
-        # Exibir os momentos invariantes de Hu para a imagem em tons de cinza
-        axs[0, 0].text(0.5, 0.0, '\n'.join(map(str, momentos_hu_cinza)), ha='center', va='top', size=25, bbox=dict(boxstyle='round', facecolor=cores[0], alpha=0.2))
-        axs[0, 0].axis('off')
-        axs[0, 0].set_title(f'Canal em tons de Cinza')
-
-        # Exibir os momentos invariantes de Hu para os 3 canais do modelo HSV
-        for i, momentos_hu in enumerate(momentos_hu_hsv, start=1):
-            row = i // 2
-            col = i % 2
-            axs[row, col].text(0.5, 0.0, '\n'.join(map(str, momentos_hu)), ha='center', va='top', size=25, bbox=dict(boxstyle='round', facecolor=cores[i], alpha=0.2))
-            axs[row, col].axis('off')
-            axs[row, col].set_title(f'Canal {i} do modelo HSV')
+    def zoom_minus(self):
+        global zoom_factor
+        zoom_factor -= 0.1
+        self.place_image(self.image_pil_base)
             
-        plt.subplots_adjust(hspace=0.2, wspace=0.5)
-        plt.tight_layout()
-        
-        # Save the figure to a BytesIO object
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
+    def convert_to_grayscale(self):
+        if self.image_pil_base:
+            image_pil_rgb = self.image_pil_base.convert('RGB')
+            matrix_rgb = np.array(image_pil_rgb)
+            matrix_gray = cv2.cvtColor(matrix_rgb, cv2.COLOR_RGB2GRAY)
+            image_pil_gray = Image.fromarray(matrix_gray)
+            self.place_image(image_pil_gray)
+            self.update_button_states(gray=True)
 
-        # Load the BytesIO object as a PIL image
-        img = Image.open(buf)
+    def revert_color(self):
+        if self.image_pil_base:
+            self.place_image(self.image_pil_base)
+            self.update_button_states(gray=False)
 
-        tk_img = ImageTk.PhotoImage(img)
-        
-        self.place_graph(tk_img)
-        
-        self.zoom_plus_button.config(state="disabled")
-        self.zoom_minus_button.config(state="disabled")
-        self.gray_scale_button.config(state="active")
-        self.colored_button.config(state="active")
-        self.histograms_button.config(state="active") 
-        self.hsv_space_button.config(state="active") 
+    def update_button_states(self, gray=False):
+        self.gray_scale_button.config(state="disabled" if gray else "active")
+        self.colored_button.config(state="active" if gray else "disabled")
+        self.histograms_button.config(state="active")
+        self.hsv_space_button.config(state="active")
         self.haralick_button.config(state="active")
-        self.hu_invariants_button.config(state="disabled")
+        self.hu_invariants_button.config(state="active")
         self.classify_button.config(state="active")
+        self.zoom_plus_button.config(state="active")
+        self.zoom_minus_button.config(state="active")
 
+    def convert_to_histogram_gray(self):
+        if self.image_pil_base:
+            gray_img = self.image_pil_base.convert('L')
+            gray_array = np.array(gray_img)
+            image = cv2.convertScaleAbs(gray_array, alpha=(15/255))
+            histogram = cv2.calcHist([image], [0], None, [16], [0, 16])
 
-    def classify(self, image_pil_color, model_path_six="best_svm_model_6_catgoties.joblib",model_path_binary="best_svm_model_binary.joblib"):
-    # Load the pre-trained SVM model
-        model_six = joblib.load(model_path_six)
-        model_binary = joblib.load(model_path_binary)
-    
-    # Initialize a scaler (assuming the scaler was saved and loaded similarly)
-    # Note: This requires the scaler to be saved during the model training process
-        scaler = StandardScaler()  # This needs to be replaced with loading the actual scaler used during training
+            plt.figure(figsize=(12, 7))
+            plt.title("Histograma de Tons de Cinza")
+            plt.xlabel("Tons de Cinza")
+            plt.ylabel("Quantidade de Ocorrências")
+            plt.plot(histogram)
+            plt.xlim([0, 15])
 
-    # Convert PIL image to NumPy array
-        array = np.array(image_pil_color)
-    
-    # Convert BGR to RGB
-        image_rgb = cv2.cvtColor(array, cv2.COLOR_BGR2RGB)
-    
-    # Convert RGB to grayscale
-        image_gray = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2GRAY)
-    
-    # Reduce image to 16 gray levels
-        image_gray //= 16
-    
-    # Define distances and angle for Haralick descriptors
-        distances = [1, 2, 4, 8, 16, 31]
-        angle = 0
-    
-        features = []
-    
-    # Compute GLCM and extract Haralick features
-        for d in distances:
-            glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
-            contrast = graycoprops(glcm, 'contrast')[0, 0]
-            homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
-            entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
-        
-        # Collect the features
-            features.extend([contrast, homogeneity, entropy])
-    
-    # Convert features list to numpy array and reshape for prediction
-        features = np.array(features).reshape(1, -1)  # Reshape for a single sample
-    
-    # Apply scaling (assuming the scaler was trained during model training)    
-        #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
-    
-    # Predict the category of the image
-        #y_pred = model.predict(features_scaled)
-        # Predict the category of the image using both models
-        y_pred_six = model_six.predict(features)
-        y_pred_binary = model_binary.predict(features)
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png')
+            buf.seek(0)
+            img = Image.open(buf)
+            tk_img = ImageTk.PhotoImage(img)
+            self.place_graph(tk_img)
+            self.update_button_states(histogram_gray=True)
 
-    # Display predictions using matplotlib
-        fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
-        prediction_text = f'6 Categories Prediction: {y_pred_six[0]}\nBinary Prediction: {y_pred_binary[0]}'
-        ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
-        ax.axis('off')
-    
-        plt.tight_layout()
+    def convert_to_histogram_hsv(self):
+        if self.image_pil_base:
+            array = np.array(self.image_pil_base)
+            hsv = cv2.cvtColor(array, cv2.COLOR_BGR2HSV)
+            h, s, v = cv2.split(hsv)
+            hist = cv2.calcHist([v, h], [0, 1], None, [8, 8], [0, 256, 0, 256])
+
+            plt.figure(figsize=(12, 7))
+            plt.imshow(hist, interpolation="nearest")
+            plt.title("Histograma HSV")
+            plt.xlabel("Hue")
+            plt.ylabel("Saturation")
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png')
+            buf.seek(0)
+            img = Image.open(buf)
+            tk_img = ImageTk.PhotoImage(img)
+            self.place_graph(tk_img)
+            self.update_button_states(histogram_hsv=True)
+            
+    def co_occurrence_matrices(self):
+        if self.image_pil_base:
+            # Converter a imagem para 16 tons de cinza
+            gray_img = self.image_pil_base.convert('L')
+            gray_img = gray_img.resize((256, 256))  # Redimensiona para um tamanho fixo, se necessário
+            gray_array = np.array(gray_img)
+            gray_array = (gray_array / 16).astype(int)  # Converter para 16 tons de cinza
+
+            # Definir distâncias
+            distances = [1, 2, 4, 8, 16, 32]
+
+            # Calcular as matrizes de co-ocorrência
+            self.co_matrices = []
+            for dist in distances:
+                co_matrix = skimage.feature.graycomatrix(gray_array, [dist], [0], levels=16, symmetric=True, normed=True)
+                self.co_matrices.append(co_matrix[:, :, 0, 0])
+
+            # Mostrar a primeira matriz
+            self.show_matrix()
+
+    def show_matrix(self):
+        plt.clf()
+        plt.imshow(self.co_matrices[self.current_matrix_index], cmap='gray')
+        plt.title(f"Co-occurrence Matrix (Distance {self.current_matrix_index + 1})")
+        plt.colorbar()
+        plt.connect('key_press_event', self.key_press_event)
         plt.show()
 
+    def key_press_event(self, event):
+        if event.key == 'right':
+            self.current_matrix_index = (self.current_matrix_index + 1) % len(self.co_matrices)
+            self.show_matrix()
+        elif event.key == 'left':
+            self.current_matrix_index = (self.current_matrix_index - 1) % len(self.co_matrices)
+            self.show_matrix()
+        
+    #########################################################################  
+    def haralick_descriptors(self, co_matrix):
+        # Calcular os descritores de Haralick
+        contrast = graycoprops(co_matrix, 'contrast')[0, 0]
+        homogeneity = graycoprops(co_matrix, 'homogeneity')[0, 0]
+
+        # Calcular a entropia
+        co_matrix_normed = co_matrix / np.sum(co_matrix)
+        entropia = -np.sum(co_matrix_normed * np.log2(co_matrix_normed + (co_matrix_normed == 0)))
+
+        return contrast, homogeneity, entropia
+
+    def get_haralick_descriptors(self):
+        if self.image_pil_base:
+            # Converter a imagem para 16 tons de cinza
+            gray_img = self.image_pil_base.convert('L')
+            gray_img = gray_img.resize((256, 256))  # Redimensiona para um tamanho fixo, se necessário
+            gray_array = np.array(gray_img)
+            gray_array = (gray_array / 16).astype(int)  # Converter para 16 tons de cinza
+
+            # Definir distâncias
+            distances = [1, 2, 4, 8, 16, 32]
+
+            # Calcular as matrizes de co-ocorrência e os descritores de Haralick
+            haralick_features_str = ""
+            for dist in distances:
+                co_matrix = graycomatrix(gray_array, [dist], [0], levels=16, symmetric=True, normed=True)
+                contrast, homogeneity, entropia = self.haralick_descriptors(co_matrix)
+                haralick_features_str += (f"Distância {dist}:\n"f"  Contraste: {contrast:.4f}\n"f"  Homogeneidade: {homogeneity:.4f}\n"f"  Entropia: {entropia:.4f}\n\n")
+
+            # Exibir os descritores
+            tk.messagebox.showinfo("Haralick Descriptors", haralick_features_str)
+            
+    def hu_invariants(self):
+        if self.image_pil_base:
+            # Converter a imagem para tons de cinza
+            gray_img = self.image_pil_base.convert('L')
+            gray_array = np.array(gray_img)
+            hu_moments_gray = cv2.HuMoments(cv2.moments(gray_array)).flatten()
+
+            # Converter a imagem para o modelo HSV
+            hsv_img = cv2.cvtColor(np.array(self.image_pil_base), cv2.COLOR_RGB2HSV)
+            h_channel, s_channel, v_channel = cv2.split(hsv_img)
+
+            hu_moments_hue = cv2.HuMoments(cv2.moments(h_channel)).flatten()
+            hu_moments_saturation = cv2.HuMoments(cv2.moments(s_channel)).flatten()
+            hu_moments_value = cv2.HuMoments(cv2.moments(v_channel)).flatten()
+
+            # Preparar a mensagem com todos os momentos de Hu
+            hu_moments_str = "\n".join(
+                [f"Hu Moment {i+1} (Gray): {moment:.4e}" for i, moment in enumerate(hu_moments_gray)] +
+                [f"Hu Moment {i+1} (Hue): {moment:.4e}" for i, moment in enumerate(hu_moments_hue)] +
+                [f"Hu Moment {i+1} (Saturation): {moment:.4e}" for i, moment in enumerate(hu_moments_saturation)] +
+                [f"Hu Moment {i+1} (Value): {moment:.4e}" for i, moment in enumerate(hu_moments_value)]
+            )
+
+            tk.messagebox.showinfo("Hu Invariants", hu_moments_str)
+            
+    def classify(self):
+        if self.image_pil_base:
+            image = self.image_pil_base.convert('L')
+            image_array = np.array(image).reshape(-1, 1)
+            scaler = StandardScaler()
+            scaled_image = scaler.fit_transform(image_array)
+
+            model = joblib.load("mlp_model.joblib")
+            prediction = model.predict(scaled_image.T)
+            class_prediction = "Benign" if prediction == 0 else "Malignant"
+
+            tk.messagebox.showinfo("Classification", f"Prediction: {class_prediction}")
 
 def main():
-    # Cria a janela principal da aplicação
     root = tk.Tk()
-    
-    # Define o estado inicial da janela como maximizado
-    root.state('zoomed')  # 'zoomed' maximiza a janela na maioria dos sistemas
-    
-    # Inicializa a aplicação e inicia o loop principal da interface gráfica
     app = ImageViewerApp(root)
     root.mainloop()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

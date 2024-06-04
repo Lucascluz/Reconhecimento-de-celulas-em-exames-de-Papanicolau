@@ -61,3 +61,8 @@ for index, row in df.iterrows():
 
         # Salvar a imagem cortada no diretório de saída
         cv2.imwrite(output_path, roi_resized)
+        
+        # Exibir o progresso
+        print(f"Imagem salva: {output_path}")
+
+print("Concluído!")
