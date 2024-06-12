@@ -1,21 +1,44 @@
 # Built-in libraries
 import io
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, ttk, messagebox
 
 # Third-party libraries
 import cv2
 import joblib
 import numpy as np
 from matplotlib import pyplot as plt
-from matplotlib import gridspec as gridspec
 from matplotlib.widgets import Button
 from PIL import Image, ImageTk
 import skimage
 from skimage.feature import graycomatrix, graycoprops
 from sklearn.preprocessing import StandardScaler
 
+import torch
+from torch import nn
+from torchvision import transforms
+from torchvision.transforms import ToTensor, Normalize, Compose
+from efficientnet_pytorch import EfficientNet
+
 global zoom_factor
+
+class CustomEfficientNet(nn.Module):
+    def __init__(self, num_classes):
+        super(CustomEfficientNet, self).__init__()
+        self.efficient_net = EfficientNet.from_pretrained('efficientnet-b0')
+        
+        # Get the output dimension of the EfficientNet feature extractor
+        efficient_net_output_dim = self.efficient_net._fc.in_features
+        self.efficient_net._fc = nn.Identity()  # Remove the final classification layer
+
+        # Define the combined fully connected layer
+        self.fc_combined = nn.Linear(efficient_net_output_dim, num_classes)
+
+    def forward(self, images):
+        efficient_net_out = self.efficient_net(images)
+        efficient_net_out = torch.flatten(efficient_net_out, 1)
+        out = self.fc_combined(efficient_net_out)
+        return out
 
 class ImageViewerApp:
     def __init__(self, master):
@@ -51,38 +74,26 @@ class ImageViewerApp:
         self.current_matrix_index = 0
 
     def create_buttons(self):
-        self.open_button = tk.Button(self.button_frame, text="Open Image", command=self.open_image, width=10, height=2)
-        self.open_button.pack(side=tk.LEFT)
-        
-        self.zoom_plus_button = tk.Button(self.button_frame, text="+", width=5, height=2, state="disabled", command=self.zoom_plus)
-        self.zoom_plus_button.pack(side=tk.LEFT)
-        
-        self.zoom_minus_button = tk.Button(self.button_frame, text="-", width=5, height=2, state="disabled", command=self.zoom_minus)
-        self.zoom_minus_button.pack(side=tk.LEFT)
+        button_info = [
+            ("Open Image", self.open_image),
+            ("+", self.zoom_plus),
+            ("-", self.zoom_minus),
+            ("Gray Scale", self.convert_to_grayscale),
+            ("Color (RGB)", self.revert_color),
+            ("Gray Hist.", self.convert_to_histogram_gray),
+            ("HSV Hist.", self.convert_to_histogram_hsv),
+            ("Co-occurrence Matrices", self.co_occurrence_matrices),
+            ("Haralick", self.get_haralick_descriptors),
+            ("Hu Invariants", self.hu_invariants),
+            ("Eficinet-2", self.eficinetBinaryClassification),
+            ("Eficinet-6", self.eficinetMultiClassification)
+        ]
 
-        self.gray_scale_button = tk.Button(self.button_frame, text="Gray Scale", width=10, height=2, state="disabled", command=self.convert_to_grayscale)
-        self.gray_scale_button.pack(side=tk.LEFT)
-        
-        self.colored_button = tk.Button(self.button_frame, text="Color (RGB)", width=10, height=2, state="disabled", command=self.revert_color)
-        self.colored_button.pack(side=tk.LEFT)
-        
-        self.histograms_button = tk.Button(self.button_frame, text="Gray Hist.", width=10, height=2, state="disabled", command=self.convert_to_histogram_gray)
-        self.histograms_button.pack(side=tk.LEFT)
-        
-        self.hsv_space_button = tk.Button(self.button_frame, text="HSV Hist.", width=10, height=2, state="disabled", command=self.convert_to_histogram_hsv)
-        self.hsv_space_button.pack(side=tk.LEFT)
-        
-        self.co_button = tk.Button(self.button_frame, text="Co-occurrence Matrices",width=10, height=2, state="disabled", command=self.co_occurrence_matrices)
-        self.co_button.pack()
-        
-        self.haralick_button = tk.Button(self.button_frame, text="Haralick", width=10, height=2, state="disabled", command=self.get_haralick_descriptors)
-        self.haralick_button.pack(side=tk.LEFT)
-        
-        self.hu_invariants_button = tk.Button(self.button_frame, text="Hu Invariants", width=10, height=2, state="disabled", command=self.hu_invariants)
-        self.hu_invariants_button.pack(side=tk.LEFT)
-        
-        self.classify_button = tk.Button(self.button_frame, text="Classify", width=10, height=2, state="disabled", command=self.classify)
-        self.classify_button.pack(side=tk.LEFT)
+        for text, command in button_info:
+            state = "disabled" if text != "Open Image" else "normal"
+            btn = tk.Button(self.button_frame, text=text, command=command, width=10, height=2, state=state)
+            btn.pack(side=tk.LEFT)
+            setattr(self, f"{text.replace(' ', '_').lower()}_button", btn)
 
     def place_graph(self, photo):
         self.canvas.delete("all")
@@ -104,18 +115,7 @@ class ImageViewerApp:
         image_resized = image_pil.resize((img_width, img_height))
         photo = ImageTk.PhotoImage(image_resized)
 
-        self.canvas.delete("all")
-
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-        image_width = photo.width()
-        image_height = photo.height()
-        x_offset = (canvas_width - image_width) // 2
-        y_offset = (canvas_height - image_height) // 2
-
-        self.canvas.create_image(x_offset, y_offset, anchor="nw", image=photo)
-        self.canvas.image = photo
-        self.canvas.config(scrollregion=self.canvas.bbox("all"))
+        self.place_graph(photo)
             
     def open_image(self):
         file_path = filedialog.askopenfilename()
@@ -129,20 +129,13 @@ class ImageViewerApp:
 
             self.place_image(self.image_pil_base)
             
-            self.open_button.config(text="Change Image")
+            self.open_image_button.config(text="Change Image")
             self.enable_buttons()
 
     def enable_buttons(self):
-        self.zoom_plus_button.config(state="active")
-        self.zoom_minus_button.config(state="active")
-        self.gray_scale_button.config(state="active")
-        self.colored_button.config(state="active")
-        self.histograms_button.config(state="active")
-        self.hsv_space_button.config(state="active")
-        self.co_button.config(state="active")
-        self.haralick_button.config(state="active")
-        self.hu_invariants_button.config(state="active")
-        self.classify_button.config(state="active")
+        for attr in dir(self):
+            if attr.endswith("_button"):
+                getattr(self, attr).config(state="active")
 
     def zoom_plus(self):
         global zoom_factor
@@ -155,42 +148,42 @@ class ImageViewerApp:
         self.place_image(self.image_pil_base)
             
     def convert_to_grayscale(self):
+        self.update_image(cv2.COLOR_RGB2GRAY, "convert", "L")
+
+    def revert_color(self):
+        self.place_image(self.image_pil_base)
+        self.update_button_states(gray=False)
+
+    def update_image(self, cvt_color_code, convert_method, mode):
         if self.image_pil_base:
             image_pil_rgb = self.image_pil_base.convert('RGB')
             matrix_rgb = np.array(image_pil_rgb)
-            matrix_gray = cv2.cvtColor(matrix_rgb, cv2.COLOR_RGB2GRAY)
-            image_pil_gray = Image.fromarray(matrix_gray)
-            self.place_image(image_pil_gray)
+            matrix_converted = cvt_color_code == 'convert' and np.array(image_pil_rgb.convert(mode)) or cv2.cvtColor(matrix_rgb, cvt_color_code)
+            image_pil_converted = Image.fromarray(matrix_converted)
+            self.place_image(image_pil_converted)
             self.update_button_states(gray=True)
 
-    def revert_color(self):
-        if self.image_pil_base:
-            self.place_image(self.image_pil_base)
-            self.update_button_states(gray=False)
-
     def update_button_states(self, gray=False):
-        self.gray_scale_button.config(state="disabled" if gray else "active")
-        self.colored_button.config(state="active" if gray else "disabled")
-        self.histograms_button.config(state="active")
-        self.hsv_space_button.config(state="active")
-        self.haralick_button.config(state="active")
-        self.hu_invariants_button.config(state="active")
-        self.classify_button.config(state="active")
-        self.zoom_plus_button.config(state="active")
-        self.zoom_minus_button.config(state="active")
+        state_gray = "disabled" if gray else "active"
+        state_color = "active" if gray else "disabled"
+        self.gray_scale_button.config(state=state_gray)
+        self.colored_button.config(state=state_color)
 
     def convert_to_histogram_gray(self):
+        self.show_histogram('L', "Histograma de Tons de Cinza", [0, 16])
+
+    def convert_to_histogram_hsv(self):
+        self.show_histogram('HSV', "Histograma HSV", [0, 256, 0, 256])
+
+    def show_histogram(self, mode, title, hist_range):
         if self.image_pil_base:
-            gray_img = self.image_pil_base.convert('L')
-            gray_array = np.array(gray_img)
-            image = cv2.convertScaleAbs(gray_array, alpha=(15/255))
-            histogram = cv2.calcHist([image], [0], None, [16], [0, 16])
+            image = self.image_pil_base.convert(mode)
+            array = np.array(image)
+            hist = cv2.calcHist([array], [0], None, [16], hist_range)
 
             plt.figure(figsize=(12, 7))
-            plt.title("Histograma de Tons de Cinza")
-            plt.xlabel("Tons de Cinza")
-            plt.ylabel("Quantidade de Ocorrências")
-            plt.plot(histogram)
+            plt.title(title)
+            plt.plot(hist)
             plt.xlim([0, 15])
 
             buf = io.BytesIO()
@@ -199,47 +192,17 @@ class ImageViewerApp:
             img = Image.open(buf)
             tk_img = ImageTk.PhotoImage(img)
             self.place_graph(tk_img)
-            self.update_button_states(histogram_gray=True)
 
-    def convert_to_histogram_hsv(self):
-        if self.image_pil_base:
-            array = np.array(self.image_pil_base)
-            hsv = cv2.cvtColor(array, cv2.COLOR_BGR2HSV)
-            h, s, v = cv2.split(hsv)
-            hist = cv2.calcHist([v, h], [0, 1], None, [8, 8], [0, 256, 0, 256])
-
-            plt.figure(figsize=(12, 7))
-            plt.imshow(hist, interpolation="nearest")
-            plt.title("Histograma HSV")
-            plt.xlabel("Hue")
-            plt.ylabel("Saturation")
-
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png')
-            buf.seek(0)
-            img = Image.open(buf)
-            tk_img = ImageTk.PhotoImage(img)
-            self.place_graph(tk_img)
-            self.update_button_states(histogram_hsv=True)
-            
     def co_occurrence_matrices(self):
         if self.image_pil_base:
-            # Converter a imagem para 16 tons de cinza
             gray_img = self.image_pil_base.convert('L')
-            gray_img = gray_img.resize((256, 256))  # Redimensiona para um tamanho fixo, se necessário
+            gray_img = gray_img.resize((256, 256))
             gray_array = np.array(gray_img)
-            gray_array = (gray_array / 16).astype(int)  # Converter para 16 tons de cinza
+            gray_array = (gray_array / 16).astype(int)
 
-            # Definir distâncias
             distances = [1, 2, 4, 8, 16, 32]
 
-            # Calcular as matrizes de co-ocorrência
-            self.co_matrices = []
-            for dist in distances:
-                co_matrix = skimage.feature.graycomatrix(gray_array, [dist], [0], levels=16, symmetric=True, normed=True)
-                self.co_matrices.append(co_matrix[:, :, 0, 0])
-
-            # Mostrar a primeira matriz
+            self.co_matrices = [graycomatrix(gray_array, [dist], [0], levels=16, symmetric=True, normed=True)[:, :, 0, 0] for dist in distances]
             self.show_matrix()
 
     def show_matrix(self):
@@ -251,20 +214,14 @@ class ImageViewerApp:
         plt.show()
 
     def key_press_event(self, event):
-        if event.key == 'right':
-            self.current_matrix_index = (self.current_matrix_index + 1) % len(self.co_matrices)
+        if event.key in ['right', 'left']:
+            self.current_matrix_index = (self.current_matrix_index + (1 if event.key == 'right' else -1)) % len(self.co_matrices)
             self.show_matrix()
-        elif event.key == 'left':
-            self.current_matrix_index = (self.current_matrix_index - 1) % len(self.co_matrices)
-            self.show_matrix()
-        
-    #########################################################################  
+
     def haralick_descriptors(self, co_matrix):
-        # Calcular os descritores de Haralick
         contrast = graycoprops(co_matrix, 'contrast')[0, 0]
         homogeneity = graycoprops(co_matrix, 'homogeneity')[0, 0]
 
-        # Calcular a entropia
         co_matrix_normed = co_matrix / np.sum(co_matrix)
         entropia = -np.sum(co_matrix_normed * np.log2(co_matrix_normed + (co_matrix_normed == 0)))
 
@@ -272,62 +229,78 @@ class ImageViewerApp:
 
     def get_haralick_descriptors(self):
         if self.image_pil_base:
-            # Converter a imagem para 16 tons de cinza
-            gray_img = self.image_pil_base.convert('L')
-            gray_img = gray_img.resize((256, 256))  # Redimensiona para um tamanho fixo, se necessário
+            gray_img = self.image_pil_base.convert('L').resize((256, 256))
             gray_array = np.array(gray_img)
-            gray_array = (gray_array / 16).astype(int)  # Converter para 16 tons de cinza
+            gray_array = (gray_array / 16).astype(int)
 
-            # Definir distâncias
             distances = [1, 2, 4, 8, 16, 32]
-
-            # Calcular as matrizes de co-ocorrência e os descritores de Haralick
-            haralick_features_str = ""
-            for dist in distances:
-                co_matrix = graycomatrix(gray_array, [dist], [0], levels=16, symmetric=True, normed=True)
-                contrast, homogeneity, entropia = self.haralick_descriptors(co_matrix)
-                haralick_features_str += (f"Distância {dist}:\n"f"  Contraste: {contrast:.4f}\n"f"  Homogeneidade: {homogeneity:.4f}\n"f"  Entropia: {entropia:.4f}\n\n")
-
-            # Exibir os descritores
-            tk.messagebox.showinfo("Haralick Descriptors", haralick_features_str)
+            features = [self.haralick_descriptors(graycomatrix(gray_array, [dist], [0], levels=16, symmetric=True, normed=True)) for dist in distances]
+            features_str = "\n\n".join([f"Distância {dist}:\n  Contraste: {f[0]:.4f}\n  Homogeneidade: {f[1]:.4f}\n  Entropia: {f[2]:.4f}" for dist, f in zip(distances, features)])
+            
+            messagebox.showinfo("Haralick Descriptors", features_str)
             
     def hu_invariants(self):
         if self.image_pil_base:
-            # Converter a imagem para tons de cinza
-            gray_img = self.image_pil_base.convert('L')
-            gray_array = np.array(gray_img)
-            hu_moments_gray = cv2.HuMoments(cv2.moments(gray_array)).flatten()
-
-            # Converter a imagem para o modelo HSV
+            gray_img = np.array(self.image_pil_base.convert('L'))
             hsv_img = cv2.cvtColor(np.array(self.image_pil_base), cv2.COLOR_RGB2HSV)
-            h_channel, s_channel, v_channel = cv2.split(hsv_img)
+            channels = [gray_img, hsv_img[:,:,0], hsv_img[:,:,1], hsv_img[:,:,2]]
 
-            hu_moments_hue = cv2.HuMoments(cv2.moments(h_channel)).flatten()
-            hu_moments_saturation = cv2.HuMoments(cv2.moments(s_channel)).flatten()
-            hu_moments_value = cv2.HuMoments(cv2.moments(v_channel)).flatten()
-
-            # Preparar a mensagem com todos os momentos de Hu
-            hu_moments_str = "\n".join(
-                [f"Hu Moment {i+1} (Gray): {moment:.4e}" for i, moment in enumerate(hu_moments_gray)] +
-                [f"Hu Moment {i+1} (Hue): {moment:.4e}" for i, moment in enumerate(hu_moments_hue)] +
-                [f"Hu Moment {i+1} (Saturation): {moment:.4e}" for i, moment in enumerate(hu_moments_saturation)] +
-                [f"Hu Moment {i+1} (Value): {moment:.4e}" for i, moment in enumerate(hu_moments_value)]
-            )
-
-            tk.messagebox.showinfo("Hu Invariants", hu_moments_str)
+            hu_moments = [cv2.HuMoments(cv2.moments(ch)).flatten() for ch in channels]
+            hu_moments_str = "\n".join([f"Hu Moment {i+1} ({label}): {moment:.4e}" for label, moments in zip(["Gray", "Hue", "Saturation", "Value"], hu_moments) for i, moment in enumerate(moments)])
             
-    def classify(self):
-        if self.image_pil_base:
-            image = self.image_pil_base.convert('L')
-            image_array = np.array(image).reshape(-1, 1)
-            scaler = StandardScaler()
-            scaled_image = scaler.fit_transform(image_array)
+            messagebox.showinfo("Hu Invariants", hu_moments_str)
+            
+    def eficinetBinaryClassification(self):
+        preprocess = Compose([
+            ToTensor(),
+            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
 
-            model = joblib.load("mlp_model.joblib")
-            prediction = model.predict(scaled_image.T)
-            class_prediction = "Benign" if prediction == 0 else "Malignant"
+        image = self.image_pil_base.convert('RGB')
+        input_tensor = preprocess(image).unsqueeze(0)
 
-            tk.messagebox.showinfo("Classification", f"Prediction: {class_prediction}")
+        model = CustomEfficientNet(num_classes=2)
+        model.load_state_dict(torch.load('custom_eficinet_model_binary.pth'))  # Carregar o modelo treinado
+        model.eval()
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        input_tensor = input_tensor.to(device)
+
+        with torch.no_grad():
+            output = model(input_tensor)
+
+        class_labels = ["Normal", "Cancer"]
+        _, predicted_idx = torch.max(output, 1)
+        predicted_label = class_labels[predicted_idx.item()]
+
+        messagebox.showinfo("Classification", f"Prediction: {predicted_label}")
+            
+    def eficinetMultiClassification(self):
+        preprocess = Compose([
+            ToTensor(),
+            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+        image = self.image_pil_base.convert('RGB')
+        input_tensor = preprocess(image).unsqueeze(0)
+
+        model = CustomEfficientNet(num_classes=6)
+        model.load_state_dict(torch.load('custom_eficinet_model_6_categories.pth'))  # Carregar o modelo treinado
+        model.eval()
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        input_tensor = input_tensor.to(device)
+
+        with torch.no_grad():
+            output = model(input_tensor)
+
+        class_labels = ['ASC-H', 'ASC-US', 'HSIL', 'LSIL', 'Normal', 'SCC']
+        _, predicted_idx = torch.max(output, 1)
+        predicted_label = class_labels[predicted_idx.item()]
+
+        messagebox.showinfo("Classification", f"Prediction: {predicted_label}")
 
 def main():
     root = tk.Tk()
