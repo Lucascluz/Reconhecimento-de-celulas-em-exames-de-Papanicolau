@@ -13,6 +13,8 @@ import torch
 from torch import nn
 from torchvision.transforms import ToTensor, Normalize, Compose
 from efficientnet_pytorch import EfficientNet
+from torchvision import models, transforms
+import torch.nn as nn
 
 global zoom_factor
 
@@ -316,20 +318,32 @@ class ImageViewerApp:
             button.pack()
             
     def eficinetBinaryClassification(self):
+        model_path = 'D:\dev\pai\Reconhecimento-de-celulas-em-exames-de-Papanicolau\eficinet_model_binary_fine_tuned.pth'
+        
         preprocess = Compose([
             ToTensor(),
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         image = self.image_pil_base.convert('RGB')
         input_tensor = preprocess(image).unsqueeze(0)
-        state_dict = torch.load('custom_eficinet_model_binary.pth')
-        state_dict['fc_combined.weight'] = state_dict['fc_combined.weight'][:2, :]
-        state_dict['fc_combined.bias'] = state_dict['fc_combined.bias'][:2]
-        model = CustomEfficientNet(num_classes=2)
-        model.load_state_dict(state_dict)
+        
+        # state_dict = torch.load('eficinet_model_binary_fine_tuned.pth')
+        # model = CustomEfficientNet(num_classes=2)
+        # model.load_state_dict(state_dict)
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # model.to(device)
+        # input_tensor = input_tensor.to(device)
+
+
+        model = models.efficientnet_b0()
+        num_features = model.classifier[1].in_features
+        model.fc = nn.Linear(num_features, 2)
+        model.load_state_dict(torch.load(model_path))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         input_tensor = input_tensor.to(device)
+        model.eval()
+
         with torch.no_grad():
             output = model(input_tensor)
         class_labels = ["Normal", "Cancer"]
@@ -338,18 +352,32 @@ class ImageViewerApp:
         messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {predicted_label}")
             
     def eficinetMultiClassification(self):
+        model_path = 'D:\dev\pai\Reconhecimento-de-celulas-em-exames-de-Papanicolau\eficinet_model_6_categories_fine_tuned.pth'
+    
+        
         preprocess = Compose([
             ToTensor(),
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         image = self.image_pil_base.convert('RGB')
         input_tensor = preprocess(image).unsqueeze(0)
-        model = CustomEfficientNet(num_classes=6)
-        model.load_state_dict(torch.load('custom_eficinet_model_6_categories.pth'))
-        model.eval()
+        
+        # model = CustomEfficientNet(num_classes=6)
+        # model.load_state_dict(torch.load('custom_eficinet_model_6_categories.pth'))
+        # model.eval()
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # model.to(device)
+        # input_tensor = input_tensor.to(device)
+
+        model = models.efficientnet_b0()
+        num_features = model.classifier[1].in_features
+        model.fc = nn.Linear(num_features, 2)
+        model.load_state_dict(torch.load(model_path))
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
         input_tensor = input_tensor.to(device)
+        model.eval()
+        
         with torch.no_grad():
             output = model(input_tensor)
         class_labels = ['ASC-H', 'ASC-US', 'HSIL', 'LSIL', 'Normal', 'SCC']
