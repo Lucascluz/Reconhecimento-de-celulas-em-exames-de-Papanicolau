@@ -15,6 +15,9 @@ from torchvision.transforms import ToTensor, Normalize, Compose
 from efficientnet_pytorch import EfficientNet
 from torchvision import models, transforms
 import torch.nn as nn
+import os
+import joblib
+from sklearn.preprocessing import StandardScaler
 
 global zoom_factor
 
@@ -84,6 +87,8 @@ class ImageViewerApp:
             ("Co-occurrence Matrices", self.co_occurrence_matrices),
             ("Haralick", self.get_haralick_descriptors),
             ("Hu Invariants", self.hu_invariants),
+            ("SVM-2", self.svmBinaryClassification),
+            ("SVM-6", self.svmMulticlassClassification),
             ("Eficinet-2", self.eficinetBinaryClassification),
             ("Eficinet-6", self.eficinetMultiClassification)
         ]
@@ -316,10 +321,110 @@ class ImageViewerApp:
             # Add an OK button to close the window
             button = tk.Button(top, text="OK", command=top.destroy)
             button.pack()
+
+    def svmBinaryClassification(self):
+        model_path = os.path.join('models', 'best_svm_model_binary.joblib')
+        model = joblib.load(model_path)
+
+        # scaler = StandardScaler()
+        array = np.array(self.image_pil_base)
+
+        # Convert RGB to grayscale
+        image_gray = cv2.cvtColor(array, cv2.COLOR_RGB2GRAY)
+    
+        # Reduce image to 16 gray levels
+        image_gray //= 16
+    
+        # Define distances and angle for Haralick descriptors
+        distances = [1, 2, 4, 8, 16, 31]
+        angle = 0
+    
+        features = []
+    
+        # Compute GLCM and extract Haralick features
+        for d in distances:
+            glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
+            contrast = graycoprops(glcm, 'contrast')[0, 0]
+            homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
+            entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
+        
+            # Collect the features
+            features.extend([contrast, homogeneity, entropy])
+    
+        # Convert features list to numpy array and reshape for prediction
+        features = np.array(features).reshape(1, -1)  # Reshape for a single sample
+    
+        # Apply scaling (assuming the scaler was trained during model training)    
+        #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
+    
+        # Predict the category of the image
+        #y_pred = model.predict(features_scaled)
+        # Predict the category of the image using both models
+        y_pred = model.predict(features)
+
+        # Display predictions using matplotlib
+        fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
+        prediction_text = f'Binary Prediction: {y_pred[0]}'
+        ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
+        ax.axis('off')
+    
+        plt.tight_layout()
+        plt.show()
+
+    def svmMulticlassClassification(self):
+        model_path = os.path.join('models', 'best_svm_model_6_catgoties.joblib')
+        model = joblib.load(model_path)
+
+        # scaler = StandardScaler()
+        array = np.array(self.image_pil_base)
+
+        # Convert RGB to grayscale
+        image_gray = cv2.cvtColor(array, cv2.COLOR_RGB2GRAY)
+    
+        # Reduce image to 16 gray levels
+        image_gray //= 16
+    
+        # Define distances and angle for Haralick descriptors
+        distances = [1, 2, 4, 8, 16, 31]
+        angle = 0
+    
+        features = []
+    
+        # Compute GLCM and extract Haralick features
+        for d in distances:
+            glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
+            contrast = graycoprops(glcm, 'contrast')[0, 0]
+            homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
+            entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
+        
+            # Collect the features
+            features.extend([contrast, homogeneity, entropy])
+    
+        # Convert features list to numpy array and reshape for prediction
+        features = np.array(features).reshape(1, -1)  # Reshape for a single sample
+    
+        # Apply scaling (assuming the scaler was trained during model training)    
+        #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
+    
+        # Predict the category of the image
+        #y_pred = model.predict(features_scaled)
+        # Predict the category of the image using both models
+        y_pred = model.predict(features)
+
+        # Display predictions using matplotlib
+        fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
+        prediction_text = f'Binary Prediction: {y_pred[0]}'
+        ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
+        ax.axis('off')
+    
+        plt.tight_layout()
+        plt.show()
+
             
     def eficinetBinaryClassification(self):
-        model_path = 'D:\dev\pai\Reconhecimento-de-celulas-em-exames-de-Papanicolau\eficinet_model_binary_fine_tuned.pth'
-        
+        # model_path = 'D:\dev\pai\Reconhecimento-de-celulas-em-exames-de-Papanicolau\eficinet_model_binary_fine_tuned.pth'
+        model_path = os.path.join('models', 'eficinet_model_binary_fine_tuned.pth')
+
         preprocess = Compose([
             ToTensor(),
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -352,8 +457,8 @@ class ImageViewerApp:
         messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {predicted_label}")
             
     def eficinetMultiClassification(self):
-        model_path = 'D:\dev\pai\Reconhecimento-de-celulas-em-exames-de-Papanicolau\eficinet_model_6_categories_fine_tuned.pth'
-    
+        # model_path = 'D:\dev\pai\Reconhecimento-de-celulas-em-exames-de-Papanicolau\eficinet_model_6_categories_fine_tuned.pth'
+        model_path = os.path.join('models', 'eficinet_model_6_categories_fine_tuned.pth')
         
         preprocess = Compose([
             ToTensor(),
