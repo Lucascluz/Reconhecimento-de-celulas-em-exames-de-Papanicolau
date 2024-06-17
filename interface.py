@@ -19,6 +19,7 @@ import os
 import joblib
 from sklearn.preprocessing import StandardScaler
 import mahotas
+import time
 
 global zoom_factor
 
@@ -324,6 +325,7 @@ class ImageViewerApp:
             button.pack()
 
     def svmBinaryClassification(self):
+        start_time = time.time()
         model_path = os.path.join('models', 'svm_binary.pkl')
         scaler_path = os.path.join('models', 'scaler_binary.pkl')
         model = joblib.load(model_path)
@@ -342,47 +344,13 @@ class ImageViewerApp:
         new_features = ht_mean.reshape(1, -1)  
         new_features_scaled = scaler.transform(new_features)
         prediction = model.predict(new_features_scaled)
-        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {prediction}")
-        # # Reduce image to 16 gray levels
-        # image_gray //= 16
-    
-        # # Define distances and angle for Haralick descriptors
-        # distances = [1, 2, 4, 8, 16, 31]
-        # angle = 0
-    
-        # features = []
-    
-        # # Compute GLCM and extract Haralick features
-        # for d in distances:
-        #     glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
-        #     contrast = graycoprops(glcm, 'contrast')[0, 0]
-        #     homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
-        #     entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
-        
-        #     # Collect the features
-        #     features.extend([contrast, homogeneity, entropy])
-    
-        # # Convert features list to numpy array and reshape for prediction
-        # features = np.array(features).reshape(1, -1)  # Reshape for a single sample
-    
-        # # Apply scaling (assuming the scaler was trained during model training)    
-        # #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
-    
-        # # Predict the category of the image
-        # #y_pred = model.predict(features_scaled)
-        # # Predict the category of the image using both models
-        # y_pred = model.predict(features)
+        prediction_time = time.time() - start_time
 
-        # Display predictions using matplotlib
-        # fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
-        # prediction_text = f'Binary Prediction: {y_pred[0]}'
-        # ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
-        # ax.axis('off')
-    
-        # plt.tight_layout()
-        # plt.show()
+        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {prediction}\n" + f"Time: {prediction_time:.2f}s")
+        
 
     def svmMulticlassClassification(self):
+        start_time = time.time()
         model_path = os.path.join('models', 'svm_multiclass.pkl')
         scaler_path = os.path.join('models', 'scaler_multiclass.pkl')
         model = joblib.load(model_path)
@@ -401,7 +369,8 @@ class ImageViewerApp:
         new_features = ht_mean.reshape(1, -1)  
         new_features_scaled = scaler.transform(new_features)
         prediction = model.predict(new_features_scaled)
-        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {prediction}")
+        prediction_time = time.time() - start_time
+        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {prediction}\n" + f"Time: {prediction_time:.2f}s")
         
         # model_path = os.path.join('models', 'best_svm_model_6_catgoties.joblib')
         # model = joblib.load(model_path)
@@ -452,6 +421,7 @@ class ImageViewerApp:
         # plt.show()
  
     def eficinetBinaryClassification(self):
+        start_time = time.time()
         model_path = os.path.join('models', 'efficientnet_binary_fine_tuned.pth')
 
         preprocess = Compose([
@@ -476,9 +446,11 @@ class ImageViewerApp:
         class_labels = ["Normal", "Cancer"]
         _, predicted_idx = torch.max(output, 1)
         predicted_label = class_labels[predicted_idx.item()]
-        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {predicted_label}")
+        prediction_time = time.time() - start_time
+        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {predicted_label}\n" + f"Time: {prediction_time:.2f}s")
             
     def eficinetMultiClassification(self):
+        start_time = time.time()
         model_path = os.path.join('models', 'efficientnet_multiclass_fine_tuned.pth')
         
         preprocess = Compose([
@@ -504,7 +476,11 @@ class ImageViewerApp:
         class_labels = ['ASC-H', 'ASC-US', 'HSIL', 'LSIL', 'Normal', 'SCC']
         _, predicted_idx = torch.max(output, 1)
         predicted_label = class_labels[predicted_idx.item()]
-        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {predicted_label}")
+
+        prediction_time = time.time() - start_time
+
+
+        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {predicted_label}\n" + f"Time: {prediction_time:.2f}s")
 
 def main():
     ctk.set_appearance_mode("dark")
