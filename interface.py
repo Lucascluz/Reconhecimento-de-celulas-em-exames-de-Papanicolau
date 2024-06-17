@@ -18,6 +18,7 @@ import torch.nn as nn
 import os
 import joblib
 from sklearn.preprocessing import StandardScaler
+import mahotas
 
 global zoom_factor
 
@@ -323,102 +324,132 @@ class ImageViewerApp:
             button.pack()
 
     def svmBinaryClassification(self):
-        model_path = os.path.join('models', 'best_svm_model_binary.joblib')
+        model_path = os.path.join('models', 'svm_binary.pkl')
+        scaler_path = os.path.join('models', 'scaler_binary.pkl')
         model = joblib.load(model_path)
+        scaler = joblib.load(scaler_path)
+        class_labels = ['Healthy', 'Unhealthy']
 
         # scaler = StandardScaler()
         array = np.array(self.image_pil_base)
 
         # Convert RGB to grayscale
         image_gray = cv2.cvtColor(array, cv2.COLOR_RGB2GRAY)
+
+        textures = mahotas.features.haralick(image_gray)
+        ht_mean = textures.mean(axis=0)
+
+        new_features = ht_mean.reshape(1, -1)  
+        new_features_scaled = scaler.transform(new_features)
+        prediction = model.predict(new_features_scaled)
+        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {prediction}")
+        # # Reduce image to 16 gray levels
+        # image_gray //= 16
     
-        # Reduce image to 16 gray levels
-        image_gray //= 16
+        # # Define distances and angle for Haralick descriptors
+        # distances = [1, 2, 4, 8, 16, 31]
+        # angle = 0
     
-        # Define distances and angle for Haralick descriptors
-        distances = [1, 2, 4, 8, 16, 31]
-        angle = 0
+        # features = []
     
-        features = []
-    
-        # Compute GLCM and extract Haralick features
-        for d in distances:
-            glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
-            contrast = graycoprops(glcm, 'contrast')[0, 0]
-            homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
-            entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
+        # # Compute GLCM and extract Haralick features
+        # for d in distances:
+        #     glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
+        #     contrast = graycoprops(glcm, 'contrast')[0, 0]
+        #     homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
+        #     entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
         
-            # Collect the features
-            features.extend([contrast, homogeneity, entropy])
+        #     # Collect the features
+        #     features.extend([contrast, homogeneity, entropy])
     
-        # Convert features list to numpy array and reshape for prediction
-        features = np.array(features).reshape(1, -1)  # Reshape for a single sample
+        # # Convert features list to numpy array and reshape for prediction
+        # features = np.array(features).reshape(1, -1)  # Reshape for a single sample
     
-        # Apply scaling (assuming the scaler was trained during model training)    
-        #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
+        # # Apply scaling (assuming the scaler was trained during model training)    
+        # #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
     
-        # Predict the category of the image
-        #y_pred = model.predict(features_scaled)
-        # Predict the category of the image using both models
-        y_pred = model.predict(features)
+        # # Predict the category of the image
+        # #y_pred = model.predict(features_scaled)
+        # # Predict the category of the image using both models
+        # y_pred = model.predict(features)
 
         # Display predictions using matplotlib
-        fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
-        prediction_text = f'Binary Prediction: {y_pred[0]}'
-        ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
-        ax.axis('off')
+        # fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
+        # prediction_text = f'Binary Prediction: {y_pred[0]}'
+        # ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
+        # ax.axis('off')
     
-        plt.tight_layout()
-        plt.show()
+        # plt.tight_layout()
+        # plt.show()
 
     def svmMulticlassClassification(self):
-        model_path = os.path.join('models', 'best_svm_model_6_catgoties.joblib')
+        model_path = os.path.join('models', 'svm_multiclass.pkl')
+        scaler_path = os.path.join('models', 'scaler_multiclass.pkl')
         model = joblib.load(model_path)
+        scaler = joblib.load(scaler_path)
+        class_labels = ['ASC-H', 'ASC-US', 'HSIL', 'LSIL', 'Negative for intraepithelial lesion', 'SCC']
 
         # scaler = StandardScaler()
         array = np.array(self.image_pil_base)
 
         # Convert RGB to grayscale
         image_gray = cv2.cvtColor(array, cv2.COLOR_RGB2GRAY)
-    
-        # Reduce image to 16 gray levels
-        image_gray //= 16
-    
-        # Define distances and angle for Haralick descriptors
-        distances = [1, 2, 4, 8, 16, 31]
-        angle = 0
-    
-        features = []
-    
-        # Compute GLCM and extract Haralick features
-        for d in distances:
-            glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
-            contrast = graycoprops(glcm, 'contrast')[0, 0]
-            homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
-            entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
-        
-            # Collect the features
-            features.extend([contrast, homogeneity, entropy])
-    
-        # Convert features list to numpy array and reshape for prediction
-        features = np.array(features).reshape(1, -1)  # Reshape for a single sample
-    
-        # Apply scaling (assuming the scaler was trained during model training)    
-        #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
-    
-        # Predict the category of the image
-        #y_pred = model.predict(features_scaled)
-        # Predict the category of the image using both models
-        y_pred = model.predict(features)
 
-        # Display predictions using matplotlib
-        fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
-        prediction_text = f'Binary Prediction: {y_pred[0]}'
-        ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
-        ax.axis('off')
+        textures = mahotas.features.haralick(image_gray)
+        ht_mean = textures.mean(axis=0)
+
+        new_features = ht_mean.reshape(1, -1)  
+        new_features_scaled = scaler.transform(new_features)
+        prediction = model.predict(new_features_scaled)
+        messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {prediction}")
+        
+        # model_path = os.path.join('models', 'best_svm_model_6_catgoties.joblib')
+        # model = joblib.load(model_path)
+
+        # # scaler = StandardScaler()
+        # array = np.array(self.image_pil_base)
+
+        # # Convert RGB to grayscale
+        # image_gray = cv2.cvtColor(array, cv2.COLOR_RGB2GRAY)
     
-        plt.tight_layout()
-        plt.show()
+        # # Reduce image to 16 gray levels
+        # image_gray //= 16
+    
+        # # Define distances and angle for Haralick descriptors
+        # distances = [1, 2, 4, 8, 16, 31]
+        # angle = 0
+    
+        # features = []
+    
+        # # Compute GLCM and extract Haralick features
+        # for d in distances:
+        #     glcm = graycomatrix(image_gray, distances=[d], angles=[angle], levels=16, symmetric=True, normed=True)
+        #     contrast = graycoprops(glcm, 'contrast')[0, 0]
+        #     homogeneity = graycoprops(glcm, 'homogeneity')[0, 0]
+        #     entropy = -np.sum(glcm * np.log2(glcm + np.finfo(float).eps))
+        
+        #     # Collect the features
+        #     features.extend([contrast, homogeneity, entropy])
+    
+        # # Convert features list to numpy array and reshape for prediction
+        # features = np.array(features).reshape(1, -1)  # Reshape for a single sample
+    
+        # # Apply scaling (assuming the scaler was trained during model training)    
+        # #features_scaled = scaler.transform(features)  # Uncomment if scaling is necessary
+    
+        # # Predict the category of the image
+        # #y_pred = model.predict(features_scaled)
+        # # Predict the category of the image using both models
+        # y_pred = model.predict(features)
+
+        # # Display predictions using matplotlib
+        # fig, ax = plt.subplots(figsize=(6, 3))  # Adjust size as needed
+        # prediction_text = f'Binary Prediction: {y_pred[0]}'
+        # ax.text(0.5, 0.5, prediction_text, fontsize=15, ha='center', va='center')
+        # ax.axis('off')
+    
+        # plt.tight_layout()
+        # plt.show()
  
     def eficinetBinaryClassification(self):
         model_path = os.path.join('models', 'efficientnet_binary_fine_tuned.pth')
@@ -459,7 +490,6 @@ class ImageViewerApp:
         
         image = self.image_pil_base.convert('RGB')
         input_tensor = preprocess(image).unsqueeze(0)
-        print(input_tensor.shape)
 
         # Carrgar e alterar a ultima camada da CNN
         model = models.efficientnet_b0()
