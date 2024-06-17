@@ -11,7 +11,7 @@ from PIL import Image, ImageTk
 from skimage.feature import graycomatrix, graycoprops
 import torch
 from torch import nn
-from torchvision.transforms import ToTensor, Normalize, Compose
+from torchvision.transforms import ToTensor, Normalize, Compose, Resize, CenterCrop
 from efficientnet_pytorch import EfficientNet
 from torchvision import models, transforms
 import torch.nn as nn
@@ -419,34 +419,25 @@ class ImageViewerApp:
     
         plt.tight_layout()
         plt.show()
-
-            
+ 
     def eficinetBinaryClassification(self):
-        # model_path = 'D:\dev\pai\Reconhecimento-de-celulas-em-exames-de-Papanicolau\eficinet_model_binary_fine_tuned.pth'
-        model_path = os.path.join('models', 'eficinet_model_binary_fine_tuned.pth')
+        model_path = os.path.join('models', 'efficientnet_binary_fine_tuned.pth')
 
         preprocess = Compose([
+            Resize(224),
+            CenterCrop(224),
             ToTensor(),
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
+
         image = self.image_pil_base.convert('RGB')
         input_tensor = preprocess(image).unsqueeze(0)
-        
-        # state_dict = torch.load('eficinet_model_binary_fine_tuned.pth')
-        # model = CustomEfficientNet(num_classes=2)
-        # model.load_state_dict(state_dict)
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # model.to(device)
-        # input_tensor = input_tensor.to(device)
-
-
+ 
         model = models.efficientnet_b0()
         num_features = model.classifier[1].in_features
         model.fc = nn.Linear(num_features, 2)
-        model.load_state_dict(torch.load(model_path))
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        input_tensor = input_tensor.to(device)
+
+        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))        
         model.eval()
 
         with torch.no_grad():
@@ -457,30 +448,25 @@ class ImageViewerApp:
         messagebox.showinfo("Classification", f"Possible:{class_labels}\n" + f"\nPrediction: {predicted_label}")
             
     def eficinetMultiClassification(self):
-        # model_path = 'D:\dev\pai\Reconhecimento-de-celulas-em-exames-de-Papanicolau\eficinet_model_6_categories_fine_tuned.pth'
-        model_path = os.path.join('models', 'eficinet_model_6_categories_fine_tuned.pth')
+        model_path = os.path.join('models', 'efficientnet_multiclass_fine_tuned.pth')
         
         preprocess = Compose([
+            Resize(224),
+            CenterCrop(224),
             ToTensor(),
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
+        
         image = self.image_pil_base.convert('RGB')
         input_tensor = preprocess(image).unsqueeze(0)
-        
-        # model = CustomEfficientNet(num_classes=6)
-        # model.load_state_dict(torch.load('custom_eficinet_model_6_categories.pth'))
-        # model.eval()
-        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # model.to(device)
-        # input_tensor = input_tensor.to(device)
+        print(input_tensor.shape)
 
+        # Carrgar e alterar a ultima camada da CNN
         model = models.efficientnet_b0()
         num_features = model.classifier[1].in_features
-        model.fc = nn.Linear(num_features, 2)
-        model.load_state_dict(torch.load(model_path))
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model.to(device)
-        input_tensor = input_tensor.to(device)
+        model.fc = nn.Linear(num_features, 6)
+
+        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))      
         model.eval()
         
         with torch.no_grad():
